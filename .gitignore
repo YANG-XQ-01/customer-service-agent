@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# 环境变量（含密钥，绝不提交）
+.env
+
+# IDE
+.idea/
+.vscode/
+
+# 日志与临时文件
+logs/
+*.log
+.DS_Store
+
+# 本地生成的数据文件（容器数据卷由 docker-compose 管理）
+data/*.db
+
