@@ -14,6 +14,10 @@ venv/
 .idea/
 .vscode/
 
+# Obsidian（以项目文件夹为仓库时生成的配置）
+.obsidian/
+.trash/
+
 # 日志与临时文件
 logs/
 *.log
@@ -21,4 +25,3 @@ logs/
 
 # 本地生成的数据文件（容器数据卷由 docker-compose 管理）
 data/*.db
-
