@@ -50,5 +50,42 @@ customer-service-agent/
 
 ## 运行方式
 
-阶段 1 完成后补充：安装依赖、准备 `.env`、启动命令与验证步骤。
+### 1. 准备环境（首次）
 
+```powershell
+# 激活已实测的 conda 环境（Python 3.13 + langchain 1.2）
+conda activate langchain1.2
+
+# 复制 .env.example 为 .env，填入你的 DASHSCOPE_API_KEY
+# （密钥只放 .env，已被 git 忽略，不会提交）
+```
+
+如果在新机器上从零安装依赖：
+
+```powershell
+pip install -r requirements.txt
+```
+
+### 2. 启动服务
+
+```powershell
+python -m uvicorn app.main:app --reload
+```
+
+浏览器打开 <http://127.0.0.1:8000> 即可聊天。
+若端口 8000 被占用（Windows 报错 10013 或 address already in use），换一个端口：
+
+```powershell
+python -m uvicorn app.main:app --port 8001
+```
+
+### 3. 验证会话记忆（阶段 1 通过标准）
+
+同一会话里连发三句：
+
+1. `你好`
+2. `我叫小明，喜欢蓝色`
+3. `我叫什么名字？`
+
+第三句能答出“小明”即记忆生效；服务端日志会打印每次请求的
+用户消息、耗时、token 用量和助手回复。

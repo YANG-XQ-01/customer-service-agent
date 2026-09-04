@@ -1,0 +1,14 @@
+# ===== 电商智能客服 Agent =====
+# 版本号以 conda 环境 langchain1.2（Python 3.13）实测版本为准
+
+# ---- 阶段 1：Web 服务 + 大模型直连 ----
+fastapi>=0.135
+uvicorn>=0.46
+python-dotenv>=1.2
+langchain-openai>=1.1.11
+# 说明：langchain-core 由 langchain-openai 自动带上来，无需手动安装
+
+# ---- 后续阶段追加（先不安装）----
+# langgraph（阶段 3）
+# langchain-milvus、pymysql、sqlalchemy（阶段 2）
+
