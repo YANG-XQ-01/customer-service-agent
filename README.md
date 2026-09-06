@@ -89,3 +89,16 @@ python -m uvicorn app.main:app --port 8001
 
 第三句能答出“小明”即记忆生效；服务端日志会打印每次请求的
 用户消息、耗时、token 用量和助手回复。
+
+### 4. 初始化业务数据与知识库（阶段 2 起需要）
+
+```powershell
+# 建库建表 + 灌入演示订单/售后数据（可重复执行，会重建本项目 4 张表）
+python -m app.seed_data
+
+# 把 data/knowledge 下的知识文档向量化存入 Milvus（可重复执行，会重建集合）
+python -m app.rag.indexer
+```
+
+两条命令都设计成幂等：重复执行不会产生重复数据。
+运行前确认 `.env` 里 MYSQL_*（本地开发用 root）和 MILVUS_* 已填好。

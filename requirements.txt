@@ -8,7 +8,14 @@ python-dotenv>=1.2
 langchain-openai>=1.1.11
 # 说明：langchain-core 由 langchain-openai 自动带上来，无需手动安装
 
-# ---- 后续阶段追加（先不安装）----
-# langgraph（阶段 3）
-# langchain-milvus、pymysql、sqlalchemy（阶段 2）
+# ---- 阶段 2：MySQL / Milvus / RAG（本机 conda 环境已实测）----
+langchain>=1.2.12
+langchain-milvus>=0.4
+langchain-text-splitters>=1.1
+SQLAlchemy>=2.0,<2.1
+PyMySQL>=1.1
+cryptography>=42
+
+# ---- 后续阶段追加 ----
+# langgraph>=1.1（阶段 3，环境已预装）
 

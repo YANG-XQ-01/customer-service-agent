@@ -29,8 +29,28 @@ LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 # 每个会话最多记住多少轮（1 轮 = 用户 1 句 + 助手 1 句）
 MEMORY_MAX_TURNS = int(os.getenv("MEMORY_MAX_TURNS", "10"))
 
+# ---- MySQL（订单 / 售后数据）----
+MYSQL_HOST = os.getenv("MYSQL_HOST", "127.0.0.1")
+MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
+MYSQL_USER = os.getenv("MYSQL_USER", "root")
+MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "")
+MYSQL_DB = os.getenv("MYSQL_DB", "customer_service")
+
+# SQLAlchemy 连接串。charset=utf8mb4 是中文不乱码的关键
+DATABASE_URL = (
+    f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}"
+    f"@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DB}?charset=utf8mb4"
+)
+
+# ---- Milvus 知识向量库 ----
+MILVUS_HOST = os.getenv("MILVUS_HOST", "127.0.0.1")
+MILVUS_PORT = int(os.getenv("MILVUS_PORT", "19530"))
+# 本项目专用的集合名，和旧项目的 ops_docs 互不干扰
+MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION", "customer_service_kb")
+# 文本向量化模型（阿里云百炼）
+QWEN_EMBEDDING_MODEL = os.getenv("QWEN_EMBEDDING_MODEL", "text-embedding-v3")
+
 # ---- 服务与日志 ----
 APP_HOST = os.getenv("APP_HOST", "127.0.0.1")
 APP_PORT = int(os.getenv("APP_PORT", "8000"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-
