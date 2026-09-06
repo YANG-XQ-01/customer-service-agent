@@ -88,6 +88,8 @@ async def chat(req: ChatRequest):
     messages_for_model = [
         {"role": m["role"], "content": m["content"]} for m in history
     ]
+    messages_for_model.insert(0, {"role": "system",
+                                  "content": "你是星辰数码商城的客服小星，回答简洁、礼貌，用中文，不确定的事情不要编。"})
     messages_for_model.append({"role": "user", "content": user_message})
 
     logger.info("=== 收到消息 session=%s ===", session_id)
