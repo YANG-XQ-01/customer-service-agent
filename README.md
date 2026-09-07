@@ -102,3 +102,18 @@ python -m app.rag.indexer
 
 两条命令都设计成幂等：重复执行不会产生重复数据。
 运行前确认 `.env` 里 MYSQL_*（本地开发用 root）和 MILVUS_* 已填好。
+
+### 5. 阶段 3：LangGraph 多智能体
+
+自阶段 3 起，请求先经过 **LangGraph 图**：
+
+```text
+用户消息 -> 路由节点（判断意图）-> 订单专家 / 售后专家 / 知识专家 /
+闲聊节点 / 澄清兜底节点 -> 最终回答
+```
+
+- 状态定义：[app/state.py](app/state.py)
+- 图组装：[app/graph.py](app/graph.py)
+- 路由与专家节点：[app/agents/](app/agents/)
+
+每个专家只拿到本职的工具子集；工具调用、节点进出都打印在服务端日志里。

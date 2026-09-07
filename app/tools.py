@@ -5,10 +5,26 @@
 模型就是靠这些信息决定“要不要用、什么时候用、传什么参数”。
 所以描述必须具体、说人话——这是工具能被正确调用的关键。
 """
+import logging
+import time
+
 from langchain_core.tools import tool
 
 from app.db import SessionLocal
 from app.models import AfterSale, LogisticsEvent, Order, OrderItem
+
+logger = logging.getLogger("customer-service")
+
+
+def _log_tool_call(name: str, params: str, result: str, elapsed: float) -> None:
+    """工具内统一打印调用日志：名称 / 参数 / 返回 / 耗时。
+
+    为什么在工具里打而不是用回调：阶段 3 每个专家节点内部还有一层
+    Agent 循环，回调容易漏挂；在工具函数里打日志最稳妥，永远不会漏。
+    """
+    logger.info(">>> 调用工具: %s", name)
+    logger.info(">>> 工具参数: %s", params)
+    logger.info(">>> 工具返回(%.2f秒): %s", elapsed, result)
 
 
 def _query_order_rows(order_no: str):
@@ -31,26 +47,32 @@ def _query_order_rows(order_no: str):
 @tool
 def query_order_by_no(order_no: str) -> str:
     """查询订单信息：输入完整订单号，返回订单状态、下单时间、金额和商品清单。"""
+    start = time.perf_counter()
     result = _query_order_rows(order_no)
     if result is None:
-        return f"未找到订单 {order_no}，请核实订单号后重试"
-    order, items = result
-    item_text = "、".join(
-        f"{it.product_name} x{it.quantity}" for it in items
-    )
-    return (
-        f"订单号：{order.order_no}\n"
-        f"状态：{order.status}\n"
-        f"下单时间：{order.created_at:%Y-%m-%d %H:%M}\n"
-        f"商品：{item_text}\n"
-        f"实付金额：¥{order.total_amount}\n"
-        f"快递：{order.carrier or '未发货'} {order.tracking_no or ''}"
-    )
+        text = f"未找到订单 {order_no}，请核实订单号后重试"
+    else:
+        order, items = result
+        item_text = "、".join(
+            f"{it.product_name} x{it.quantity}" for it in items
+        )
+        text = (
+            f"订单号：{order.order_no}\n"
+            f"状态：{order.status}\n"
+            f"下单时间：{order.created_at:%Y-%m-%d %H:%M}\n"
+            f"商品：{item_text}\n"
+            f"实付金额：¥{order.total_amount}\n"
+            f"快递：{order.carrier or '未发货'} {order.tracking_no or ''}"
+        )
+    _log_tool_call("query_order_by_no", f"{{'order_no': '{order_no}'}}",
+                   text, time.perf_counter() - start)
+    return text
 
 
 @tool
 def query_logistics_by_no(order_no: str) -> str:
     """查询物流轨迹：输入完整订单号，返回该订单每一段物流更新。"""
+    start = time.perf_counter()
     db = SessionLocal()
     try:
         events = (
@@ -63,17 +85,21 @@ def query_logistics_by_no(order_no: str) -> str:
         db.close()
 
     if _query_order_rows(order_no) is None:
-        return f"未找到订单 {order_no}，请核实订单号后重试"
+        text = f"未找到订单 {order_no}，请核实订单号后重试"
+    elif not events:
+        text = f"订单 {order_no} 暂无物流轨迹（可能尚未发货）"
+    else:
+        lines = [f"{e.event_at:%m-%d %H:%M} {e.description}" for e in events]
+        text = f"订单 {order_no} 物流轨迹：\n" + "\n".join(lines)
+    _log_tool_call("query_logistics_by_no", f"{{'order_no': '{order_no}'}}",
+                   text, time.perf_counter() - start)
+    return text
 
-    if not events:
-        return f"订单 {order_no} 暂无物流轨迹（可能尚未发货）"
-    lines = [f"{e.event_at:%m-%d %H:%M} {e.description}" for e in events]
-    return f"订单 {order_no} 物流轨迹：\n" + "\n".join(lines)
-    
 
 @tool
 def query_after_sale_by_no(order_no: str) -> str:
     """查询售后单进度：输入完整订单号，返回退货/退款/换货申请的状态。"""
+    start = time.perf_counter()
     db = SessionLocal()
     try:
         records = (
@@ -86,15 +112,19 @@ def query_after_sale_by_no(order_no: str) -> str:
         db.close()
 
     if not records:
-        return f"订单 {order_no} 没有售后申请记录"
-    lines = []
-    for r in records:
-        amount = f"¥{r.refund_amount}" if r.refund_amount is not None else "待定"
-        lines.append(
-            f"- {r.service_type}申请：状态 {r.status}，"
-            f"金额 {amount}，原因：{r.reason or '未填写'}"
-        )
-    return f"订单 {order_no} 的售后记录：\n" + "\n".join(lines)
+        text = f"订单 {order_no} 没有售后申请记录"
+    else:
+        lines = []
+        for r in records:
+            amount = f"¥{r.refund_amount}" if r.refund_amount is not None else "待定"
+            lines.append(
+                f"- {r.service_type}申请：状态 {r.status}，"
+                f"金额 {amount}，原因：{r.reason or '未填写'}"
+            )
+        text = f"订单 {order_no} 的售后记录：\n" + "\n".join(lines)
+    _log_tool_call("query_after_sale_by_no", f"{{'order_no': '{order_no}'}}",
+                   text, time.perf_counter() - start)
+    return text
 
 
 @tool
@@ -103,10 +133,14 @@ def search_service_knowledge(query: str) -> str:
     输入用户的问题原文，返回相关知识点。回答政策/商品问题前必须先调用本工具。"""
     from app.rag.retriever import search_top_k  # 延迟导入，避免循环依赖
 
-    return search_top_k(query, k=3)
+    start = time.perf_counter()
+    text = search_top_k(query, k=3)
+    _log_tool_call("search_service_knowledge", f"{{'query': '{query}'}}",
+                   text, time.perf_counter() - start)
+    return text
 
 
-# Agent 会拿到这份清单，逐个“阅读”工具说明
+# 保留总清单（给需要全部工具的场合用；阶段 3 各专家只取子集）
 TOOLS = [
     query_order_by_no,
     query_logistics_by_no,

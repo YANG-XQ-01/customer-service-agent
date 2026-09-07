@@ -11,7 +11,7 @@ from langchain_openai import ChatOpenAI
 from app import config
 
 
-def create_chat_model() -> ChatOpenAI:
+def _build_chat_model() -> ChatOpenAI:
     """返回一个可被 LangChain 调用的聊天模型对象。"""
     return ChatOpenAI(
         model=config.QWEN_CHAT_MODEL,
@@ -19,4 +19,20 @@ def create_chat_model() -> ChatOpenAI:
         base_url=config.QWEN_BASE_URL,
         temperature=config.LLM_TEMPERATURE,
     )
+
+
+# 全局复用一个模型实例：多个节点/Agent 共享，避免重复握手
+_model: ChatOpenAI | None = None
+
+
+def get_chat_model() -> ChatOpenAI:
+    """惰性创建共享模型（第一次调用时才真正建连接）。"""
+    global _model
+    if _model is None:
+        _model = _build_chat_model()
+    return _model
+
+
+# 兼容旧引用：main.py 之前用 create_chat_model() 创建
+create_chat_model = _build_chat_model
 
