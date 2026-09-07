@@ -62,11 +62,14 @@ def query_logistics_by_no(order_no: str) -> str:
     finally:
         db.close()
 
+    if _query_order_rows(order_no) is None:
+        return f"未找到订单 {order_no}，请核实订单号后重试"
+
     if not events:
         return f"订单 {order_no} 暂无物流轨迹（可能尚未发货）"
     lines = [f"{e.event_at:%m-%d %H:%M} {e.description}" for e in events]
     return f"订单 {order_no} 物流轨迹：\n" + "\n".join(lines)
-
+    
 
 @tool
 def query_after_sale_by_no(order_no: str) -> str:
