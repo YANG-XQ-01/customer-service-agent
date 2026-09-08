@@ -37,6 +37,7 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
 )
 logger = logging.getLogger("customer-service")
+logger.info("人工审核退款阈值: ¥%s", config.REFUND_THRESHOLD)
 
 app = FastAPI(title="电商智能客服 Agent", version="0.3.0")
 

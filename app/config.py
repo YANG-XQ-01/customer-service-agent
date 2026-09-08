@@ -29,6 +29,10 @@ LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 # 每个会话最多记住多少轮（1 轮 = 用户 1 句 + 助手 1 句）
 MEMORY_MAX_TURNS = int(os.getenv("MEMORY_MAX_TURNS", "10"))
 
+# ---- 售后规则 ----
+# 退款金额超过该阈值必须转人工审核（元）
+REFUND_THRESHOLD = int(os.getenv("REFUND_THRESHOLD", "500"))
+
 # ---- MySQL（订单 / 售后数据）----
 MYSQL_HOST = os.getenv("MYSQL_HOST", "127.0.0.1")
 MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))

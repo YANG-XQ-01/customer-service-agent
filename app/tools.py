@@ -10,6 +10,7 @@ import time
 
 from langchain_core.tools import tool
 
+from app import config
 from app.db import SessionLocal
 from app.memory import new_ticket_id
 from app.models import AfterSale, LogisticsEvent, Order, OrderItem
@@ -143,7 +144,7 @@ def search_service_knowledge(query: str) -> str:
 
 @tool
 def request_human_handoff(reason: str) -> str:
-    """把对话转给人工客服：当用户要求的退款/退货金额超过 ¥500 阈值，
+    """把对话转给人工客服：当退款/退货金额超过人工审核阈值，
     或出现需要人工审核的情况时调用。参数 reason 用一句话写清用户诉求。
     调用后停止自行处理，由转人工节点收尾。"""
     start = time.perf_counter()
@@ -153,6 +154,14 @@ def request_human_handoff(reason: str) -> str:
                    text, time.perf_counter() - start)
     return text
 
+
+# 把配置里的阈值写进工具描述（模型能看到的“说明书”），
+# 改 .env 后重启服务即生效
+request_human_handoff.description = (
+    f"把对话转给人工客服：当用户要求的退款/退货金额超过 "
+    f"¥{config.REFUND_THRESHOLD} 元，或出现需要人工审核的情况时调用。"
+    "参数 reason 用一句话写清用户诉求。调用后停止自行处理，由转人工节点收尾。"
+)
 
 # 保留总清单（给需要全部工具的场合用；阶段 3 各专家只取子集）
 TOOLS = [
