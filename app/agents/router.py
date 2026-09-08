@@ -18,7 +18,9 @@ logger = logging.getLogger("customer-service")
 class IntentResult(BaseModel):
     """路由模型必须输出的结构化结果（枚举约束 + 订单号）。"""
 
-    intent: Literal["order", "after_sale", "knowledge", "chat", "clarify"]
+    intent: Literal[
+        "order", "after_sale", "knowledge", "chat", "clarify", "handoff"
+    ]
     order_no: Optional[str] = Field(
         default=None, description="消息或最近对话中出现的 10~12 位完整订单号"
     )

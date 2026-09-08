@@ -11,6 +11,7 @@ import time
 from langchain_core.tools import tool
 
 from app.db import SessionLocal
+from app.memory import new_ticket_id
 from app.models import AfterSale, LogisticsEvent, Order, OrderItem
 
 logger = logging.getLogger("customer-service")
@@ -140,11 +141,24 @@ def search_service_knowledge(query: str) -> str:
     return text
 
 
+@tool
+def request_human_handoff(reason: str) -> str:
+    """把对话转给人工客服：当用户要求的退款/退货金额超过 ¥500 阈值，
+    或出现需要人工审核的情况时调用。参数 reason 用一句话写清用户诉求。
+    调用后停止自行处理，由转人工节点收尾。"""
+    start = time.perf_counter()
+    ticket_id = new_ticket_id()
+    text = f"HANDOFF_REQUESTED|{ticket_id}|{reason}"
+    _log_tool_call("request_human_handoff", f"{{'reason': '{reason}'}}",
+                   text, time.perf_counter() - start)
+    return text
+
+
 # 保留总清单（给需要全部工具的场合用；阶段 3 各专家只取子集）
 TOOLS = [
     query_order_by_no,
     query_logistics_by_no,
     query_after_sale_by_no,
     search_service_knowledge,
+    request_human_handoff,
 ]
-

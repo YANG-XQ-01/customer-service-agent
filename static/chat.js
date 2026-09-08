@@ -37,6 +37,15 @@ async function send() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "请求失败");
     appendBubble("assistant", data.reply);
+    if (data.needs_human && data.handoff) {
+      appendBubble(
+        "system",
+        "🔔 已为您转接人工客服，工单号：" +
+        data.handoff.ticket_id +
+        "\n转接原因：" + data.handoff.reason +
+        "\n人工客服正在查看对话记录，请稍候。"
+      );
+    }
   } catch (err) {
     appendBubble("assistant", "出错了：" + err.message);
   } finally {
@@ -49,4 +58,3 @@ sendBtn.addEventListener("click", send);
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter") send();
 });
-

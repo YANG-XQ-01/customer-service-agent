@@ -22,8 +22,15 @@ class AgentState(TypedDict, total=False):
     intent: str
     # 路由时抽出的关键信息（如订单号），各节点复用，不用重复找
     extracted: dict[str, Any]
+    # 会话 ID（转人工工单要记录是哪位用户）
+    session_id: str
+    # 该会话此前“连续没能理解”的次数（由 main 从外部存储读入）
+    attempts: int
+    # 转人工标记：售后专家工具触发后置 True，条件边据此改道
+    handoff_requested: bool
+    handoff_ticket_id: str
+    handoff_reason: str
     # 最终回答（专家节点产出，接口层从这里取）
     answer: str
     # 每个节点的执行记录（节点名 + 耗时），方便复盘整张图的走向
     trace: Annotated[list[str], operator.add]
-

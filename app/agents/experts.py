@@ -23,6 +23,7 @@ from app.tools import (
     query_after_sale_by_no,
     query_logistics_by_no,
     query_order_by_no,
+    request_human_handoff,
     search_service_knowledge,
 )
 
@@ -43,7 +44,12 @@ ORDER_AGENT = _build_agent(
     [query_order_by_no, query_logistics_by_no], ORDER_SYSTEM
 )
 AFTER_SALE_AGENT = _build_agent(
-    [query_order_by_no, query_after_sale_by_no, search_service_knowledge],
+    [
+        query_order_by_no,
+        query_after_sale_by_no,
+        search_service_knowledge,
+        request_human_handoff,
+    ],
     AFTER_SALE_SYSTEM,
 )
 KNOWLEDGE_AGENT = _build_agent(
@@ -73,8 +79,57 @@ async def order_agent_node(state: AgentState) -> dict:
     return await _run_agent_node(ORDER_AGENT, state, "订单专家")
 
 
+def _extract_handoff_marker(messages) -> tuple | None:
+    """在 Agent 的消息里找 request_human_handoff 工具留下的标记。
+
+    标记格式：HANDOFF_REQUESTED|工单号|原因
+    找到了就返回 (工单号, 原因)，由转人工节点统一收尾、打包上下文。
+    """
+    prefix = "HANDOFF_REQUESTED|"
+    for message in messages:
+        content = getattr(message, "content", "")
+        if isinstance(content, str) and content.startswith(prefix):
+            parts = content.split("|", 2)
+            if len(parts) >= 3:
+                return parts[1], parts[2]
+    return None
+
+
 async def after_sale_agent_node(state: AgentState) -> dict:
-    return await _run_agent_node(AFTER_SALE_AGENT, state, "售后专家")
+    """售后专家：比其它专家多一道“转人工”检查。
+
+    如果 Agent 因为退款金额超阈值调了 request_human_handoff，
+    就不把它的普通回答当最终答案，而是打上转人工标记，
+    让条件边把流程改道到 handoff_node 收尾。
+    """
+    start = time.perf_counter()
+    logger.info(">>> 进入节点: 售后专家")
+    result = await AFTER_SALE_AGENT.ainvoke(
+        {"messages": state["messages"]},
+        config={"recursion_limit": 15},
+    )
+    elapsed = time.perf_counter() - start
+
+    marker = _extract_handoff_marker(result["messages"])
+    if marker is not None:
+        ticket_id, reason = marker
+        logger.info(">>> 售后专家触发转人工: ticket=%s reason=%s (%.2fs)",
+                    ticket_id, reason, elapsed)
+        return {
+            "handoff_requested": True,
+            "handoff_ticket_id": ticket_id,
+            "handoff_reason": reason,
+            "messages": [],  # 不追加普通回答，最终话术由转人工节点生成
+            "trace": [f"售后专家 {elapsed:.2f}s (触发转人工)"],
+        }
+
+    final_message = result["messages"][-1]
+    logger.info(">>> 退出节点: 售后专家 (%.2fs)", elapsed)
+    return {
+        "answer": final_message.content,
+        "messages": [final_message],
+        "trace": [f"售后专家 {elapsed:.2f}s"],
+    }
 
 
 async def knowledge_agent_node(state: AgentState) -> dict:
@@ -102,4 +157,3 @@ async def chat_node(state: AgentState) -> dict:
 
 async def clarify_node(state: AgentState) -> dict:
     return await _run_plain_node(state, CLARIFY_SYSTEM, "澄清/兜底节点")
-

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>人工客服工作台</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Microsoft YaHei", sans-serif; background: #f0f2f5; padding: 20px; }
+    h1 { font-size: 20px; margin-bottom: 6px; }
+    .hint { color: #888; font-size: 13px; margin-bottom: 16px; }
+    .card {
+      background: #fff; border-radius: 10px; padding: 16px 18px;
+      margin-bottom: 12px; border-left: 4px solid #e67e22;
+    }
+    .card h2 { font-size: 15px; margin-bottom: 8px; }
+    .meta { font-size: 13px; color: #555; line-height: 1.8; }
+    .reason { background: #fdf6ec; padding: 6px 10px; border-radius: 6px; margin: 6px 0; }
+    .msgs { margin-top: 8px; border-top: 1px dashed #ddd; padding-top: 8px; }
+    .msg { font-size: 13px; margin: 4px 0; line-height: 1.5; }
+    .msg b { color: #2b6de8; }
+  </style>
+</head>
+<body>
+  <h1>📋 人工客服工作台（演示用）</h1>
+  <div class="hint">页面每 5 秒自动刷新工单列表。工单来自机器人的“转人工”触发。</div>
+  <div id="list">加载中…</div>
+
+  <script>
+    async function load() {
+      try {
+        const res = await fetch("/api/handoffs");
+        const data = await res.json();
+        const list = document.getElementById("list");
+        if (!data.tickets || data.tickets.length === 0) {
+          list.innerHTML = "<p>暂无工单。</p>";
+          return;
+        }
+        list.innerHTML = data.tickets.map((t) => {
+          const msgs = (t.messages || []).map((m) =>
+            `<div class="msg"><b>${m.role === "user" ? "用户" : "客服"}:</b> ${m.content}</div>`
+          ).join("");
+          const slot = t.extracted && t.extracted.order_no
+            ? `订单号：${t.extracted.order_no}` : "无";
+          return `
+            <div class="card">
+              <h2>工单 ${t.ticket_id}（${t.trigger}）</h2>
+              <div class="meta">
+                时间：${t.created_at}<br>
+                会话：${t.session_id}<br>
+                意图：${t.intent} | 槽位：${slot}
+              </div>
+              <div class="reason">转接原因：${t.reason}</div>
+              <div class="msgs">${msgs}</div>
+            </div>`;
+        }).join("");
+      } catch (err) {
+        document.getElementById("list").innerHTML = "加载失败：" + err.message;
+      }
+    }
+    load();
+    setInterval(load, 5000);
+  </script>
+</body>
+</html>
+

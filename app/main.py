@@ -17,7 +17,15 @@ from pydantic import BaseModel, Field
 
 from app import config
 from app.graph import agent_graph
-from app.memory import add_message, get_messages
+from app.memory import (
+    add_message,
+    get_attempts,
+    get_handoff_ticket,
+    get_messages,
+    increment_attempts,
+    list_handoff_tickets,
+    reset_attempts,
+)
 
 # Windows 控制台默认编码可能是 GBK，先切成 UTF-8，保证日志中文可读
 for _stream in (sys.stdout, sys.stderr):
@@ -45,6 +53,9 @@ class ChatResponse(BaseModel):
 
     session_id: str
     reply: str
+    # 转人工相关：needs_human=True 时前端展示“已转人工”提示
+    needs_human: bool = False
+    handoff: dict | None = None
 
 
 @app.get("/")
@@ -65,6 +76,18 @@ app.mount(
 async def health():
     """健康检查。"""
     return {"status": "ok"}
+
+
+@app.get("/human")
+async def human_page():
+    """人工客服工作台页面。"""
+    return FileResponse(config.BASE_DIR / "static" / "human.html")
+
+
+@app.get("/api/handoffs")
+async def handoffs():
+    """人工工作台接口：返回全部工单（最新在前）。"""
+    return {"tickets": list_handoff_tickets()}
 
 
 def _to_chat_messages(history: list[dict[str, str]]):
@@ -104,9 +127,11 @@ async def chat(req: ChatRequest):
     history = get_messages(session_id)
     initial_messages = _to_chat_messages(history)
     initial_messages.append(HumanMessage(content=user_message))
+    # 连续失败计数放在图外（memory），每次请求开始时读进来
+    attempts = get_attempts(session_id)
 
     logger.info("=== 收到消息 session=%s ===", session_id)
-    logger.info("用户: %s", user_message)
+    logger.info("用户: %s | 当前连续失败次数: %s", user_message, attempts)
 
     # 2) 让整张图跑起来：route -> 专家节点 -> END
     start = time.perf_counter()
@@ -115,6 +140,8 @@ async def chat(req: ChatRequest):
             {
                 "messages": initial_messages,
                 "trace": [],
+                "session_id": session_id,
+                "attempts": attempts,
             }
         )
     except Exception as exc:
@@ -136,5 +163,32 @@ async def chat(req: ChatRequest):
     add_message(session_id, "user", user_message)
     add_message(session_id, "assistant", reply)
 
-    return ChatResponse(session_id=session_id, reply=reply)
+    # 5) 更新连续失败计数：本轮是“没听懂”且没转人工 → +1；否则清零
+    intent = output.get("intent", "")
+    if intent == "clarify" and not output.get("handoff_ticket_id"):
+        attempts = increment_attempts(session_id)
+        logger.info("连续失败次数更新为: %s", attempts)
+    else:
+        reset_attempts(session_id)
 
+    # 6) 如果产生工单，把摘要带给前端展示
+    needs_human = False
+    handoff_info = None
+    ticket_id = output.get("handoff_ticket_id")
+    if ticket_id:
+        ticket = get_handoff_ticket(ticket_id)
+        if ticket:
+            needs_human = True
+            handoff_info = {
+                "ticket_id": ticket["ticket_id"],
+                "trigger": ticket["trigger"],
+                "reason": ticket["reason"],
+            }
+            logger.info(">>> 本次已转人工: %s (%s)", ticket_id, ticket["trigger"])
+
+    return ChatResponse(
+        session_id=session_id,
+        reply=reply,
+        needs_human=needs_human,
+        handoff=handoff_info,
+    )
