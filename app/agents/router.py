@@ -29,10 +29,16 @@ _structured = get_chat_model().with_structured_output(IntentResult)
 
 
 def _normalize_order_no(raw: str | None) -> str | None:
-    """只保留干净的 10~12 位数字，过滤掉模型可能带出的杂字符。"""
+    r"""从模型输出里提取干净的 10~12 位订单号。
+
+    用环视 (?<!\d) / (?!\d) 而不是 \\b：
+    Python 正则里 \\w 包含汉字，\\b 会把“订单20260901001”这种
+    贴着中文的订单号挡掉；环视只排除数字，中文场景也适用，
+    同时避免从 13 位以上的超长数字串里误截前 10~12 位。
+    """
     if not raw:
         return None
-    match = re.search(r"\d{10,12}", raw)
+    match = re.search(r"(?<!\d)\d{10,12}(?!\d)", raw)
     return match.group(0) if match else None
 
 
@@ -51,7 +57,8 @@ async def route_node(state: AgentState) -> dict:
                 intent, order_no, time.perf_counter() - start)
     return {
         "intent": intent,
-        "extracted": {"order_no": order_no},
+        # 合并而不是覆盖：保留之前抽到的槽位（如商品名），
+        # 为“澄清后再路由”这类循环结构做准备；用 .get 防首轮 KeyError
+        "extracted": {**(state.get("extracted") or {}), "order_no": order_no},
         "trace": [f"route -> {intent}"],
     }
-
