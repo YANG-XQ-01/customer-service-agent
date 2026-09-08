@@ -1,0 +1,194 @@
+[
+  {
+    "id": "order-with-space",
+    "description": "查订单（订单号带空格）",
+    "messages": ["帮我查一下订单 20260901001 到哪了"],
+    "expect": {
+      "intent": "order",
+      "tools_required": [
+        {"name": "query_logistics_by_no", "args": {"order_no": "20260901001"}}
+      ],
+      "must_contain": ["20260901001", "运输中"],
+      "must_not_contain": [],
+      "needs_human": false
+    }
+  },
+  {
+    "id": "order-no-space",
+    "description": "查订单（订单号紧贴中文，验证正则修复）",
+    "messages": ["帮我查一下订单20260901001到哪了"],
+    "expect": {
+      "intent": "order",
+      "tools_required": [
+        {"name": "query_logistics_by_no", "args": {"order_no": "20260901001"}}
+      ],
+      "must_contain": ["20260901001", "运输中"],
+      "must_not_contain": [],
+      "needs_human": false
+    }
+  },
+  {
+    "id": "order-not-found",
+    "description": "查不存在的订单必须诚实（小任务回归用例）",
+    "messages": ["帮我查一下订单9999999999到哪里了"],
+    "expect": {
+      "intent": "order",
+      "tools_required": [
+        {"name": "query_logistics_by_no", "args": {"order_no": "9999999999"}}
+      ],
+      "must_contain": ["未找到"],
+      "must_not_contain": ["可能尚未发货"],
+      "needs_human": false
+    }
+  },
+  {
+    "id": "knowledge-headphone",
+    "description": "商品知识问答，必须检索且不推荐库外商品",
+    "messages": ["星音蓝牙耳机 X9 防水吗？能戴着游泳吗？"],
+    "expect": {
+      "intent": "knowledge",
+      "tools_required": [
+        {"name": "search_service_knowledge", "args": {}}
+      ],
+      "must_contain": ["IPX5", "游泳"],
+      "must_not_contain": ["海跃 AquaBuds Pro", "海跃"],
+      "needs_human": false
+    }
+  },
+  {
+    "id": "policy-refund-time",
+    "description": "政策问答：退款到账时效",
+    "messages": ["退款一般要多久才能到账？"],
+    "expect": {
+      "intent": "knowledge",
+      "tools_required": [
+        {"name": "search_service_knowledge", "args": {}}
+      ],
+      "must_contain": ["工作日"],
+      "must_not_contain": [],
+      "needs_human": false
+    }
+  },
+  {
+    "id": "after-sale-progress",
+    "description": "查售后申请进度",
+    "messages": ["帮我查一下订单 20260901002 的售后申请处理到哪一步了"],
+    "expect": {
+      "intent": "after_sale",
+      "tools_required": [
+        {"name": "query_after_sale_by_no", "args": {"order_no": "20260901002"}}
+      ],
+      "must_contain": ["处理中", "退货"],
+      "must_not_contain": [],
+      "needs_human": false
+    }
+  },
+  {
+    "id": "after-sale-intransit-refund",
+    "description": "运输中订单想直接退货退款：政策正确 + 不虚构办理",
+    "messages": ["订单20260901001还在运输中，我想直接退货退款可以吗"],
+    "expect": {
+      "intent": "after_sale",
+      "tools_required": [
+        {"name": "query_order_by_no", "args": {"order_no": "20260901001"}}
+      ],
+      "must_contain": ["拒收"],
+      "must_not_contain": ["已为您办理退款", "已同意退款"],
+      "needs_human": false
+    }
+  },
+  {
+    "id": "refund-threshold-high",
+    "description": "退款金额超阈值必须真调转人工工具",
+    "messages": ["订单 20260901004 的冰箱我要全额退款，帮我直接退了"],
+    "expect": {
+      "intent": "after_sale",
+      "tools_required": [
+        {"name": "request_human_handoff", "args": {}}
+      ],
+      "must_contain": ["工单号", "人工"],
+      "must_not_contain": [],
+      "needs_human": true,
+      "trigger": "refund_threshold"
+    }
+  },
+  {
+    "id": "refund-below-threshold",
+    "description": "退款低于阈值应自动处理、不转人工（对照）",
+    "messages": ["订单 20260901002 的键盘 399 元我要全额退款"],
+    "expect": {
+      "intent": "after_sale",
+      "tools_required": [
+        {"name": "query_after_sale_by_no", "args": {"order_no": "20260901002"}}
+      ],
+      "must_contain": [],
+      "must_not_contain": ["工单号"],
+      "needs_human": false
+    }
+  },
+  {
+    "id": "user-request-handoff",
+    "description": "用户明确要求人工 → 直达转人工",
+    "messages": ["算了，不跟你说了，给我找人工客服！"],
+    "expect": {
+      "intent": "handoff",
+      "tools_required": [],
+      "must_contain": ["工单号"],
+      "must_not_contain": [],
+      "needs_human": true,
+      "trigger": "user_request"
+    }
+  },
+  {
+    "id": "repeated-failures-handoff",
+    "description": "连续两次无法理解，第三次自动转人工",
+    "messages": ["qwpoeriuyt", "zxcvbnmm", "lkjhgfd"],
+    "expect": {
+      "intent": "clarify",
+      "tools_required": [],
+      "must_contain": ["工单号", "人工"],
+      "must_not_contain": [],
+      "needs_human": true,
+      "trigger": "repeated_failures"
+    }
+  },
+  {
+    "id": "chat-smalltalk",
+    "description": "闲聊不应进业务工具",
+    "messages": ["在吗？今天天气不错，随便聊聊"],
+    "expect": {
+      "intent": "chat",
+      "tools_required": [],
+      "must_contain": [],
+      "must_not_contain": ["工单号", "订单号"],
+      "needs_human": false
+    }
+  },
+  {
+    "id": "refund-high-followup",
+    "description": "已知 bug 回归：冰箱退款（模型曾只说不调用工具）",
+    "messages": ["你好，我要退款冰箱20260901004"],
+    "expect": {
+      "intent": "after_sale",
+      "tools_required": [
+        {"name": "request_human_handoff", "args": {}}
+      ],
+      "must_contain": ["人工"],
+      "must_not_contain": [],
+      "needs_human": true,
+      "trigger": "refund_threshold"
+    }
+  },
+  {
+    "id": "complaint-12315",
+    "description": "投诉升级（12315）应转人工或妥善兜底",
+    "messages": ["我对你们的处理结果非常不满意，我要去12315投诉你们"],
+    "expect": {
+      "tools_required": [],
+      "must_contain": [],
+      "must_not_contain": [],
+      "needs_human": true
+    }
+  }
+]
+

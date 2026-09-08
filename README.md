@@ -132,3 +132,19 @@ python -m app.rag.indexer
 - 工单接口：`GET /api/handoffs`
 
 工单包含：会话 ID、触发场景、原因、路由意图、抽取槽位、最近 10 轮对话。
+
+### 7. 阶段 5：评测体系
+
+跑分脚本（14 个用例，含订单/知识/售后/转人工/闲聊/已知 bug 回归）：
+
+```powershell
+python -m eval.run_eval              # 全量
+python -m eval.run_eval --limit 5    # 前 5 个
+python -m eval.run_eval --case refund-threshold-high
+```
+
+输出四类指标：任务完成率、轨迹正确率、平均耗时、估算成本；
+结果同时保存到 `eval/report.json`。
+
+基线（阶段 5）：任务完成率 78.6%，轨迹正确率 85.7%，
+平均耗时 6.44 秒/轮，成本约 ¥0.01/轮。
