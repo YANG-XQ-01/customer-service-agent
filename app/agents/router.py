@@ -49,9 +49,17 @@ async def route_node(state: AgentState) -> dict:
     recent = state["messages"][-8:]
     router_messages = [SystemMessage(content=ROUTER_SYSTEM)] + recent
 
-    result = await _structured.ainvoke(router_messages)
-    intent = result.intent.strip().lower()
-    order_no = _normalize_order_no(result.order_no)
+    try:
+        result = await _structured.ainvoke(router_messages)
+        intent = result.intent.strip().lower()
+        raw_order_no = result.order_no
+    except Exception as exc:
+        # 模型输出不合枚举/JSON 解析失败时，不让请求 502，
+        # 降级成 clarify 走澄清/兜底节点（图里永远有路可走）
+        logger.warning(">>> 路由结构化输出解析失败，降级为 clarify: %s", exc)
+        intent = "clarify"
+        raw_order_no = None
+    order_no = _normalize_order_no(raw_order_no)
 
     logger.info(">>> 路由节点: intent=%s order_no=%s (%.2fs)",
                 intent, order_no, time.perf_counter() - start)
