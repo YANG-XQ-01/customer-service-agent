@@ -1,0 +1,65 @@
+# 电商智能客服 Agent 一键部署
+#
+# 使用：
+#   1. 复制 .env.example 为 .env 并填写 DASHSCOPE_API_KEY / MYSQL_PASSWORD
+#   2. docker compose up -d mysql milvus    （先起数据库并等 healthy）
+#   3. docker compose run --rm app python -m app.seed_data
+#   4. docker compose run --rm app python -m app.rag.indexer
+#   5. docker compose up -d app
+#   6. 浏览器打开 http://服务器IP:8010
+#
+# 设计：MySQL / Milvus 端口不映射宿主机（内部网络互通），
+# 避免与本机已有 MySQL(3306) / Milvus(19530) 冲突，也符合生产安全惯例。
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: customer_service
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  milvus:
+    image: milvusdb/milvus:v3.0.0
+    restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_USE_EMBED: "true"
+      ETCD_DATA_DIR: /var/lib/milvus/etcd
+      COMMON_STORAGETYPE: local
+      DEPLOY_MODE: STANDALONE
+    volumes:
+      - milvus-data:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8010:8000"
+    env_file: .env
+    environment:
+      # 容器内用服务名互相访问（覆盖 .env 里的 127.0.0.1）
+      MYSQL_HOST: mysql
+      MILVUS_HOST: milvus
+    depends_on:
+      mysql:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+
+volumes:
+  mysql-data:
+  milvus-data:
+

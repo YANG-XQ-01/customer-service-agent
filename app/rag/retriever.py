@@ -1,14 +1,14 @@
 """在线检索器：把用户问题向量化，去 Milvus 找最相关的知识片段。"""
-from langchain_community.embeddings import DashScopeEmbeddings
 from langchain_milvus import Milvus
 
 from app import config
+from app.rag.embeddings import DashScopeNativeEmbeddings
 
 # 用 DashScope 原生向量接口（与旧项目实测写法一致）。
 # 注意：不要用 OpenAI 兼容通道调 embedding，参数格式不兼容。
-_embeddings = DashScopeEmbeddings(
+_embeddings = DashScopeNativeEmbeddings(
     model=config.QWEN_EMBEDDING_MODEL,
-    dashscope_api_key=config.DASHSCOPE_API_KEY,
+    api_key=config.DASHSCOPE_API_KEY,
 )
 
 _store: Milvus | None = None

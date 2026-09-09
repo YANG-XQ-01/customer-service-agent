@@ -7,12 +7,12 @@
 """
 from pathlib import Path
 
-from langchain_community.embeddings import DashScopeEmbeddings
 from langchain_core.documents import Document
 from langchain_milvus import Milvus
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from app import config
+from app.rag.embeddings import DashScopeNativeEmbeddings
 
 KNOWLEDGE_DIR = config.BASE_DIR / "data" / "knowledge"
 
@@ -42,9 +42,9 @@ def build() -> None:
     chunks = splitter.split_documents(documents)
 
     # 2) 向量化并入库（embedding 需要联网调用 text-embedding-v3）
-    embeddings = DashScopeEmbeddings(
+    embeddings = DashScopeNativeEmbeddings(
         model=config.QWEN_EMBEDDING_MODEL,
-        dashscope_api_key=config.DASHSCOPE_API_KEY,
+        api_key=config.DASHSCOPE_API_KEY,
     )
     # drop_old=True：每次重建本集合，脚本可重复执行，不会产生重复数据
     Milvus.from_documents(

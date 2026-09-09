@@ -118,6 +118,40 @@ python -m app.rag.indexer
 
 每个专家只拿到本职的工具子集；工具调用、节点进出都打印在服务端日志里。
 
+## Docker 一键部署
+
+先决条件：本机已安装 Docker Desktop（Linux 服务器需装 Docker Engine + Compose 插件）。
+
+```powershell
+# 1. 准备 .env（复制 .env.example，填 DASHSCOPE_API_KEY 和 MYSQL_PASSWORD）
+# 2. 构建镜像并启动 MySQL / Milvus
+docker compose build app
+docker compose up -d mysql milvus
+
+# 3. 等两个数据库 healthy 后初始化数据与知识库
+docker compose run --rm app python -m app.seed_data
+docker compose run --rm app python -m app.rag.indexer
+
+# 4. 启动应用
+docker compose up -d app
+```
+
+- 客服页面：<http://127.0.0.1:8010>
+- 人工工作台：<http://127.0.0.1:8010/human>
+- 健康检查：<http://127.0.0.1:8010/health>
+
+设计要点：MySQL / Milvus 端口不映射宿主机（容器内部网络互通），
+与本机已有服务互不冲突；数据落在命名卷 `mysql-data` / `milvus-data`，
+`docker compose down` 不会丢数据，彻底清理需加 `-v`。
+
+常用排查：
+
+```powershell
+docker compose ps          # 看三个容器是否 healthy
+docker compose logs app    # 看应用日志
+docker compose logs milvus # 看向量库日志
+```
+
 ### 6. 阶段 4：转人工
 
 三种触发场景会生成带完整上下文的工单：
