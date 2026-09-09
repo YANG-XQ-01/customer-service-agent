@@ -319,8 +319,6 @@ async def main():
                 "actual_tools": r["actual_tools"],
                 "avg_latency": round(sum(r["latencies"]) / len(r["latencies"]), 2)
                 if r["latencies"] else 0,
-                # 完整回答（方便人工复盘），摘要仅供控制台快速浏览
-                "answer": r["answer"],
                 "answer_excerpt": (r["answer"] or "")[:120],
             }
             for r in results
