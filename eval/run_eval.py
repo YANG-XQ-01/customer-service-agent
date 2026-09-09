@@ -1,15 +1,13 @@
-"""评测脚本：跑分任务完成率 / 轨迹正确率 / 平均耗时 / 估算成本。
+"""评测脚本：任务完成率 / 轨迹正确率 / 平均耗时 / 估算成本。
 
 用法（在项目根目录）：
-    python -m eval.run_eval              # 跑全部用例
-    python -m eval.run_eval --limit 5    # 只跑前 5 个
-    python -m eval.run_eval --case refund-threshold-high
+    python -m eval.run_eval                 # 每个用例跑 1 轮
+    python -m eval.run_eval --rounds 3      # 每个用例跑 3 轮（看稳定性）
+    python -m eval.run_eval --limit 5       # 只跑前 5 个用例
+    python -m eval.run_eval --case order-not-found
 
-原理：
-- 在进程内直接调用 LangGraph 图（不经 HTTP，减少环境干扰）；
-- 用日志钩子收集每次工具调用（名称/参数）和路由意图；
-- 关键词检查答案；工单仓库检查是否真的转人工及触发场景；
-- token 用量按千问公开价估算成本（结果仅供参考）。
+为什么要多轮：模型有随机性，单轮 100% 可能是运气。
+--rounds 3 会给出每个用例的“通过率”，把时好时坏的用例暴露出来。
 """
 import argparse
 import ast
@@ -24,7 +22,6 @@ from pathlib import Path
 
 from langchain_core.messages import HumanMessage
 
-# 让控制台能正常打印中文
 for _stream in (sys.stdout, sys.stderr):
     if _stream is not None and hasattr(_stream, "reconfigure"):
         _stream.reconfigure(encoding="utf-8")
@@ -34,10 +31,8 @@ CASES_FILE = BASE_DIR / "eval" / "cases.json"
 REPORT_FILE = BASE_DIR / "eval" / "report.json"
 
 logger = logging.getLogger("customer-service")
-# 关键：不设 INFO 级别的话，工具的 INFO 日志会在到达钩子前被过滤掉
 logger.setLevel(logging.INFO)
 
-# 千问 plus 估算单价（元 / 1K tokens），仅用于成本估算
 PRICE_INPUT_YUAN_PER_1K = 0.0008
 PRICE_OUTPUT_YUAN_PER_1K = 0.002
 
@@ -55,10 +50,7 @@ class CaptureHandler(logging.Handler):
 
 
 def _parse_intent(lines: list[str]) -> str | None:
-    """从日志里取最后一次路由意图。"""
-    matches = [
-        re.search(r"路由节点: intent=(\w+)", line) for line in lines
-    ]
+    matches = [re.search(r"路由节点: intent=(\w+)", line) for line in lines]
     for m in reversed(matches):
         if m:
             return m.group(1)
@@ -66,7 +58,6 @@ def _parse_intent(lines: list[str]) -> str | None:
 
 
 def _parse_tool_calls(lines: list[str]) -> list[dict]:
-    """把日志里的工具调用还原成 [{name, args}] 列表。"""
     calls: list[dict] = []
     current: dict | None = None
     for line in lines:
@@ -85,7 +76,6 @@ def _parse_tool_calls(lines: list[str]) -> list[dict]:
 
 
 def _tool_required_satisfied(required: dict, actual: list[dict]) -> tuple[bool, str]:
-    """检查某个必需工具是否被调过（名称一致 + 关键参数匹配）。"""
     name = required["name"]
     args = required.get("args", {})
     candidates = [c for c in actual if c["name"] == name]
@@ -94,12 +84,14 @@ def _tool_required_satisfied(required: dict, actual: list[dict]) -> tuple[bool, 
     if args:
         for key, value in args.items():
             if not any(c["args"].get(key) == value for c in candidates):
-                return False, f"工具 {name} 的参数 {key}={value} 未匹配（实际参数: {[c['args'] for c in candidates]}）"
+                return False, (
+                    f"工具 {name} 的参数 {key}={value} 未匹配"
+                    f"（实际参数: {[c['args'] for c in candidates]}）"
+                )
     return True, ""
 
 
 def _messages_to_chat(history: list[dict[str, str]]):
-    """与 app/main.py 相同的历史转消息逻辑。"""
     from langchain_core.messages import AIMessage
 
     messages = []
@@ -121,7 +113,7 @@ def _read_tokens(message) -> tuple:
 
 
 async def _run_one_case(case: dict) -> dict:
-    """跑一个用例，返回评分所需全部信息。"""
+    """跑一个用例一次，返回评分所需信息。"""
     from app.graph import agent_graph
     from app.memory import (
         add_message,
@@ -179,10 +171,6 @@ async def _run_one_case(case: dict) -> dict:
         logger.removeHandler(handler)
 
     lines = handler.lines
-    actual_intent = _parse_intent(lines)
-    actual_tools = _parse_tool_calls(lines)
-
-    # 是否真的产生了本会话的工单（含触发场景）
     new_ticket = None
     for ticket in list_handoff_tickets():
         if ticket.get("session_id") == session_id:
@@ -195,22 +183,19 @@ async def _run_one_case(case: dict) -> dict:
         "latencies": latencies,
         "total_input": total_input,
         "total_output": total_output,
-        "actual_intent": actual_intent,
-        "actual_tools": actual_tools,
+        "actual_intent": _parse_intent(lines),
+        "actual_tools": _parse_tool_calls(lines),
         "new_ticket": new_ticket,
     }
 
 
 def _grade(result: dict) -> dict:
-    """按用例期望逐项打分，返回 {pass, reasons, detail}。"""
     case = result["case"]
     expect = case["expect"]
     reasons: list[str] = []
 
     if "intent" in expect and result["actual_intent"] != expect["intent"]:
-        reasons.append(
-            f"意图不符：期望 {expect['intent']}，实际 {result['actual_intent']}"
-        )
+        reasons.append(f"意图不符：期望 {expect['intent']}，实际 {result['actual_intent']}")
 
     required = expect.get("tools_required", [])
     trajectory_ok = True
@@ -237,10 +222,9 @@ def _grade(result: dict) -> dict:
             f"触发场景不符：期望 {trigger}，实际 {result['new_ticket'].get('trigger')}"
         )
 
-    passed = not reasons
     return {
-        "passed": passed,
-        "trajectory_ok": trajectory_ok and not any("工具" in r or "未调用" in r for r in reasons),
+        "passed": not reasons,
+        "trajectory_ok": trajectory_ok,
         "reasons": reasons,
     }
 
@@ -251,6 +235,7 @@ def _fmt_case(case: dict) -> str:
 
 async def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--rounds", type=int, default=1, help="每个用例跑几轮（默认 1）")
     parser.add_argument("--limit", type=int, default=None, help="只跑前 N 个用例")
     parser.add_argument("--case", type=str, default=None, help="只跑指定 id 的用例")
     args = parser.parse_args()
@@ -263,79 +248,92 @@ async def main():
     if not cases:
         raise SystemExit("没有可跑的用例")
 
-    results = []  # 保存每条用例完整运行结果的列表
-    total_latency = 0.0  # 总耗时（秒，浮点数）
-    total_turns = 0  # 总对话轮次
-    total_input = 0  # 输入token总数
-    total_output = 0  # 输出token总数
-    task_pass = 0  # 任务通过的用例数量（任务级通过率）
-    trajectory_pass = 0  # 执行轨迹通过数量（过程/步骤是否正确）
+    all_results: list[dict] = []
+    for case in cases:
+        print(f"\n运行: {_fmt_case(case)} x{args.rounds} 轮")
+        for round_index in range(1, args.rounds + 1):
+            result = await _run_one_case(case)
+            grade = _grade(result)
+            status = "PASS" if grade["passed"] else "FAIL"
+            print(f"  轮{round_index}: {status} | 意图={result['actual_intent']} | "
+                  f"工具={[t['name'] for t in result['actual_tools']]}")
+            all_results.append({**result, **grade, "round": round_index})
 
-    for index, case in enumerate(cases, start=1):
-        print(f"\n[{index}/{len(cases)}] 运行: {_fmt_case(case)}")
-        result = await _run_one_case(case)
-        grade = _grade(result)
-        results.append({**result, **grade})
+    n_cases = len(cases)
+    n_runs = len(all_results)
+    total_latency = 0.0
+    total_turns = 0
+    total_input = 0
+    total_output = 0
+    task_pass_runs = 0
+    trajectory_pass_runs = 0
+    for r in all_results:
+        total_latency += sum(r["latencies"])
+        total_turns += len(r["latencies"])
+        total_input += r["total_input"]
+        total_output += r["total_output"]
+        task_pass_runs += 1 if r["passed"] else 0
+        trajectory_pass_runs += 1 if r["trajectory_ok"] else 0
 
-        total_latency += sum(result["latencies"])
-        total_turns += len(result["latencies"])
-        total_input += result["total_input"]
-        total_output += result["total_output"]
-        if grade["passed"]:
-            task_pass += 1
-        if grade["trajectory_ok"]:
-            trajectory_pass += 1
-
-        status = "PASS" if grade["passed"] else "FAIL"
-        print(f"    结果: {status} | 意图={result['actual_intent']} | "
-              f"工具={[t['name'] for t in result['actual_tools']]}")
-        if grade["reasons"]:
-            for r in grade["reasons"]:
-                print(f"    - {r}")
-
-    n = len(cases)
     cost_yuan = (
         total_input / 1000 * PRICE_INPUT_YUAN_PER_1K
         + total_output / 1000 * PRICE_OUTPUT_YUAN_PER_1K
     )
+    case_summaries = []
+    for case in cases:
+        related = [r for r in all_results if r["case"]["id"] == case["id"]]
+        pass_count = sum(1 for r in related if r["passed"])
+        reasons = []
+        seen = set()
+        for r in related:
+            for reason in r["reasons"]:
+                if reason not in seen:
+                    seen.add(reason)
+                    reasons.append(reason)
+        case_summaries.append(
+            {
+                "id": case["id"],
+                "description": case.get("description", ""),
+                "rounds": args.rounds,
+                "pass_count": pass_count,
+                "pass_rate": round(pass_count / args.rounds, 4),
+                "reasons": reasons,
+                "answer_excerpt": (related[-1]["answer"] or "")[:120],
+            }
+        )
+
     report = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "rounds": args.rounds,
         "metrics": {
-            "task_pass_rate": round(task_pass / n, 4),
-            "trajectory_pass_rate": round(trajectory_pass / n, 4),
+            "task_pass_rate": round(task_pass_runs / n_runs, 4),
+            "trajectory_pass_rate": round(trajectory_pass_runs / n_runs, 4),
             "avg_latency_seconds": round(total_latency / total_turns, 2) if total_turns else 0,
             "total_input_tokens": total_input,
             "total_output_tokens": total_output,
             "estimated_cost_yuan": round(cost_yuan, 4),
         },
-        "cases": [
-            {
-                "id": r["case"]["id"],
-                "description": r["case"].get("description", ""),
-                "passed": r["passed"],
-                "trajectory_ok": r["trajectory_ok"],
-                "reasons": r["reasons"],
-                "actual_intent": r["actual_intent"],
-                "actual_tools": r["actual_tools"],
-                "avg_latency": round(sum(r["latencies"]) / len(r["latencies"]), 2)
-                if r["latencies"] else 0,
-                "answer_excerpt": (r["answer"] or "")[:120],
-            }
-            for r in results
-        ],
+        "cases": case_summaries,
     }
     REPORT_FILE.write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
     print("\n" + "=" * 50)
-    print("评测报告")
+    print(f"评测报告（{n_cases} 用例 x {args.rounds} 轮 = {n_runs} 次运行）")
     print("=" * 50)
-    print(f"任务完成率:      {task_pass}/{n} = {report['metrics']['task_pass_rate']:.1%}")
-    print(f"轨迹正确率:      {trajectory_pass}/{n} = {report['metrics']['trajectory_pass_rate']:.1%}")
+    print(f"任务完成率:      {task_pass_runs}/{n_runs} = {report['metrics']['task_pass_rate']:.1%}")
+    print(f"轨迹正确率:      {trajectory_pass_runs}/{n_runs} = {report['metrics']['trajectory_pass_rate']:.1%}")
     print(f"平均耗时(每轮):  {report['metrics']['avg_latency_seconds']} 秒")
     print(f"估算成本:        ¥{report['metrics']['estimated_cost_yuan']}")
-    print(f"报告已保存:      {REPORT_FILE}")
+    print("不稳定用例（通过率 < 100%）：")
+    flaky = [c for c in case_summaries if c["pass_rate"] < 1.0]
+    if flaky:
+        for c in flaky:
+            print(f"  - {c['id']}: {c['pass_count']}/{c['rounds']}，原因: {c['reasons']}")
+    else:
+        print("  无")
+    print(f"报告已保存: {REPORT_FILE}")
 
 
 if __name__ == "__main__":
