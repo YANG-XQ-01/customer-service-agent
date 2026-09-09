@@ -1,11 +1,32 @@
-# 电商智能客服 Agent（求职实战项目）
+# 电商智能客服 Agent
 
-一个用 **FastAPI + LangChain/LangGraph + RAG** 搭建的电商客服机器人：
-用户在网页上提问，系统判断意图后查订单、查售后、检索商品/政策知识，最后组织成人话回答；
-处理不了会带着完整上下文转人工。
+基于 **FastAPI + LangGraph** 的可上线智能客服系统：自动识别用户意图，
+分派给订单、售后、知识问答等专家 Agent 处理；结构化数据走 MySQL 工具精确查询，
+商品与政策知识走 Milvus 向量检索（RAG）；高风险场景（退款超阈值、连续无法解决、
+用户要求人工）由确定性规则触发转人工，并携带完整上下文生成工单。
 
-本项目是边学边做的教学项目，路线是：先写一个会调工具的单 Agent 建立直觉，
-再演进成 LangGraph 多智能体，最后做评测、优化与部署。
+系统内置 16 用例回归评测体系与可观测日志（节点级 + 工具级），
+可通过 Docker Compose 一键部署（MySQL + Milvus + 应用）。
+
+## 功能特性
+
+- **LangGraph 多智能体编排**：显式路由节点 + 专家节点 + 共享状态，
+  意图扩展只需新增节点与边，不影响既有分支；
+- **工具化数据访问**：订单/物流/售后通过 SQLAlchemy 工具查询，
+  禁止模型凭记忆编造业务数据；查无记录时如实反馈；
+- **RAG 知识问答**：知识文档向量化入库 Milvus，回答基于检索结果并注明来源，
+  降低开放域幻觉；
+- **确定性风控规则**：退款金额超阈值由代码级校验强制转人工，
+  不依赖模型提示词自觉（评测中曾复现“模型只说不做”）；
+- **转人工流程**：三种触发场景（连续失败计数 / 退款超阈值 / 用户主动要求）
+  统一打包会话 ID、意图、槽位与最近对话到工单，人工工作台实时查看；
+- **回归评测体系**：16 用例覆盖订单/知识/售后/转人工/边界场景，
+  支持 `--rounds 3` 多轮稳定性验证；当前基线 48/48 通过（完成率 100%、
+  轨迹正确率 100%，单轮平均约 ¥0.01）；
+- **全链路日志**：路由意图、节点进出、工具名称/参数/返回/耗时均落日志，
+  可复盘与定位；
+- **容器化交付**：Dockerfile + docker-compose.yml 一键拉起
+  MySQL、Milvus、应用，数据库端口不对外暴露，数据落命名卷。
 
 ## 系统架构
 
@@ -27,188 +48,108 @@ flowchart LR
     OA & AS & KA & C & H -->|最终回答| API
 ```
 
-数据边界：订单/售后等结构化事实走 MySQL 工具精确查询；
-商品/政策等开放知识走 Milvus 检索（RAG）。两个都接上，
-Agent 才能分清“查订单要调工具、问政策要去检索”。
+## 核心设计决策
+
+1. **为什么用路由节点而不是“一个全能 Agent + 长提示词”**：
+   每个专家只持有本职工具子集，降低工具误选率；业务规则（退款阈值、
+   运输中不可退）可以挂到具体分支；轨迹可按节点复盘。
+2. **为什么结构化数据走工具、知识走 RAG**：订单状态是精确、动态的事实，
+   SQL 查询可信可解释；商品/政策是开放知识，靠向量召回 + 生成。
+3. **为什么硬规则用代码兜底**：评测发现模型即使查到 ¥2999，
+   仍可能在提示词要求下调工具失败；售后节点改为读取工具返回、
+   金额超阈值即强制改道转人工，规则不再依赖模型随机性。
+4. **为什么评测先于优化**：所有改动以 16 用例回归结果为验收标准，
+   一次只改一个变量，指标未提升即回滚。
 
 ## 技术栈
 
-| 层 | 选择 | 说明 |
+| 层 | 选型 | 用途 |
 |---|---|---|
-| 大模型 | 通义千问 qwen-plus | 走阿里云百炼的 OpenAI 兼容接口，配置可换模型 |
-| 编排 | LangChain 高层 Agent → LangGraph | 阶段 2 先单 Agent，阶段 3 起多智能体 |
-| 后端 | FastAPI + uvicorn | REST API + 静态网页 |
-| 知识库 | Milvus | 商品说明/售后政策等非结构化文档的向量检索 |
-| 业务数据 | MySQL 8 | 订单、售后单等结构化数据 |
-| 前端 | 原生 HTML/CSS/JS | 简单聊天网页，无框架 |
-| 部署 | Docker Compose | 一键编排 MySQL + Milvus + 应用 |
-
-## 阶段路线（共 8 个阶段）
-
-| 阶段 | 目标 | 状态 |
-|---|---|---|
-| 0 | 设计方案定稿 + 初始化项目 | 进行中（待确认进入阶段 1） |
-| 1 | FastAPI 骨架 + 千问直连聊天（带会话记忆） | 未开始 |
-| 2 | 工具调用 + Milvus/MySQL 接入（单 Agent） | 未开始 |
-| 3 | LangGraph 多智能体：路由 + 专家 Agent + 状态 | 未开始 |
-| 4 | 转人工（三种触发场景 + 上下文打包） | 未开始 |
-| 5 | 评测体系（完成率 / 轨迹正确率 / 耗时 / 成本） | 未开始 |
-| 6 | 优化迭代（一次只改一个点，前后对比） | 未开始 |
-| 7 | 部署 + 验证清单 + 演示脚本 + 简历描述 | 未开始 |
+| 编排 | LangGraph 1.x | 路由 + 专家节点 + 显式状态 + 条件边 |
+| 大模型 | 通义千问 qwen-plus（OpenAI 兼容接口） | 路由分类 / 工具调用 / 回答生成 |
+| 向量模型 | text-embedding-v3（HTTP 原生接口，自动分批） | 知识向量化 |
+| 后端 | FastAPI + uvicorn | REST API + 静态页面 |
+| 结构化数据 | MySQL 8 + SQLAlchemy 2 + PyMySQL | 订单 / 物流 / 售后单 |
+| 向量库 | Milvus 3.0（standalone + embedded etcd） | 知识文档检索 |
+| 前端 | 原生 HTML/JS | 客服聊天页 + 人工工作台 |
+| 评测 | 自建脚本（`eval/run_eval.py`） | 完成率 / 轨迹 / 耗时 / 成本 |
+| 部署 | Docker + Docker Compose | 一键编排三服务 |
 
 ## 目录结构
 
 ```text
 customer-service-agent/
-├─ docs/      # 设计方案、阶段记录、踩坑笔记
-├─ app/       # FastAPI 入口、Agent、工具、RAG（随阶段填充）
-├─ data/      # 知识文档、演示数据脚本
-├─ eval/      # 评测集与评测脚本（阶段 5）
-├─ static/    # 聊天网页
-└─ tests/     # 自动化测试
+├─ app/
+│  ├─ agents/         # 路由节点、专家节点、转人工节点、提示词
+│  ├─ rag/            # 知识入库、在线检索、轻量向量客户端
+│  ├─ tools.py        # 工具层（查订单/物流/售后/知识库/转人工）
+│  ├─ graph.py        # LangGraph 图组装
+│  ├─ state.py        # 图状态定义
+│  ├─ memory.py       # 会话消息 / 连续失败计数 / 工单仓库
+│  ├─ models.py       # MySQL ORM 模型
+│  └─ main.py         # FastAPI 入口
+├─ data/knowledge/    # 知识文档（商品、售后政策、物流规则）
+├─ eval/              # 评测用例 + 跑分脚本
+├─ static/            # 客服页 / 人工工作台
+├─ Dockerfile
+└─ docker-compose.yml
 ```
 
-## 文档
+## 快速开始
 
-- [总体设计方案](docs/design.md)：阶段 0 交付物，记录已确认的选型、架构与路线。
-
-## 运行方式
-
-### 1. 准备环境（首次）
+### 本地开发
 
 ```powershell
-# 激活已实测的 conda 环境（Python 3.13 + langchain 1.2）
-conda activate langchain1.2
-
-# 复制 .env.example 为 .env，填入你的 DASHSCOPE_API_KEY
-# （密钥只放 .env，已被 git 忽略，不会提交）
-```
-
-如果在新机器上从零安装依赖：
-
-```powershell
-pip install -r requirements.txt
-```
-
-### 2. 启动服务
-
-```powershell
-python -m uvicorn app.main:app --reload
-```
-
-浏览器打开 <http://127.0.0.1:8000> 即可聊天。
-若端口 8000 被占用（Windows 报错 10013 或 address already in use），换一个端口：
-
-```powershell
-python -m uvicorn app.main:app --port 8001
-```
-
-### 3. 验证会话记忆（阶段 1 通过标准）
-
-同一会话里连发三句：
-
-1. `你好`
-2. `我叫小明，喜欢蓝色`
-3. `我叫什么名字？`
-
-第三句能答出“小明”即记忆生效；服务端日志会打印每次请求的
-用户消息、耗时、token 用量和助手回复。
-
-### 4. 初始化业务数据与知识库（阶段 2 起需要）
-
-```powershell
-# 建库建表 + 灌入演示订单/售后数据（可重复执行，会重建本项目 4 张表）
+# 1. 配置 .env（复制 .env.example，填入 DASHSCOPE_API_KEY）
+# 2. 初始化演示数据与知识库（可重复执行，幂等）
 python -m app.seed_data
-
-# 把 data/knowledge 下的知识文档向量化存入 Milvus（可重复执行，会重建集合）
 python -m app.rag.indexer
+
+# 3. 启动服务
+python -m uvicorn app.main:app --port 8000
 ```
 
-两条命令都设计成幂等：重复执行不会产生重复数据。
-运行前确认 `.env` 里 MYSQL_*（本地开发用 root）和 MILVUS_* 已填好。
-
-### 5. 阶段 3：LangGraph 多智能体
-
-自阶段 3 起，请求先经过 **LangGraph 图**：
-
-```text
-用户消息 -> 路由节点（判断意图）-> 订单专家 / 售后专家 / 知识专家 /
-闲聊节点 / 澄清兜底节点 -> 最终回答
-```
-
-- 状态定义：[app/state.py](app/state.py)
-- 图组装：[app/graph.py](app/graph.py)
-- 路由与专家节点：[app/agents/](app/agents/)
-
-每个专家只拿到本职的工具子集；工具调用、节点进出都打印在服务端日志里。
-
-## Docker 一键部署
-
-先决条件：本机已安装 Docker Desktop（Linux 服务器需装 Docker Engine + Compose 插件）。
+### Docker 部署
 
 ```powershell
-# 1. 准备 .env（复制 .env.example，填 DASHSCOPE_API_KEY 和 MYSQL_PASSWORD）
-# 2. 构建镜像并启动 MySQL / Milvus
 docker compose build app
 docker compose up -d mysql milvus
-
-# 3. 等两个数据库 healthy 后初始化数据与知识库
 docker compose run --rm app python -m app.seed_data
 docker compose run --rm app python -m app.rag.indexer
-
-# 4. 启动应用
 docker compose up -d app
 ```
 
 - 客服页面：<http://127.0.0.1:8010>
 - 人工工作台：<http://127.0.0.1:8010/human>
-- 健康检查：<http://127.0.0.1:8010/health>
-
-设计要点：MySQL / Milvus 端口不映射宿主机（容器内部网络互通），
-与本机已有服务互不冲突；数据落在命名卷 `mysql-data` / `milvus-data`，
-`docker compose down` 不会丢数据，彻底清理需加 `-v`。
-
-常用排查：
-
-```powershell
-docker compose ps          # 看三个容器是否 healthy
-docker compose logs app    # 看应用日志
-docker compose logs milvus # 看向量库日志
-```
-
-### 6. 阶段 4：转人工
-
-三种触发场景会生成带完整上下文的工单：
-
-1. 连续两次无法理解/解答 → 第三次自动转人工（按会话计数，成功回答后清零）；
-2. 退款金额超过 ¥500 阈值 → 售后专家必须调用转人工工具；
-3. 用户明确说“找人工” → 路由直达转人工节点。
-
-人工侧查看入口：
-
-- 工作台页面：<http://127.0.0.1:8000/human>
+- 健康检查：`GET /health`
 - 工单接口：`GET /api/handoffs`
 
-工单包含：会话 ID、触发场景、原因、路由意图、抽取槽位、最近 10 轮对话。
+MySQL / Milvus 端口不映射宿主机，仅容器内部网络互通，避免与本机服务冲突；
+数据持久化于命名卷，`docker compose down` 不丢数据。
 
-### 7. 阶段 5：评测体系
-
-跑分脚本（16 个用例，含订单/知识/售后/转人工/闲聊/已知 bug 回归）：
+## 评测
 
 ```powershell
-python -m eval.run_eval              # 全量
-python -m eval.run_eval --limit 5    # 前 5 个
+python -m eval.run_eval              # 单轮全量
+python -m eval.run_eval --rounds 3   # 多轮稳定性模式
 python -m eval.run_eval --case refund-threshold-high
 ```
 
-输出四类指标：任务完成率、轨迹正确率、平均耗时、估算成本；
-结果同时保存到 `eval/report.json`。
+输出：任务完成率 / 轨迹正确率 / 平均耗时 / 估算成本，结果写入 `eval/report.json`；
+多轮模式会列出通过率 < 100% 的不稳定用例及失败原因。
 
-基线（阶段 6 终版）：单轮与 3 轮稳定性模式（16 用例 x 3 = 48 次运行）
-均为任务完成率 100%、轨迹正确率 100%，平均耗时约 5.8 秒/轮，
-成本约 ¥0.026/48 次运行。
-阶段 6 两项优化：路由提示词区分纯政策咨询；
-售后金额超阈值由代码级强制转人工（不再依赖模型自觉）。
+## API 示例
 
-稳定性跑法：`python -m eval.run_eval --rounds 3`
-（模型有随机性，单轮 100% 可能是运气，多轮才能暴露不稳定用例）。
+```bash
+curl -X POST http://127.0.0.1:8010/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"session_id":"demo","message":"帮我查一下订单20260901001到哪了"}'
+```
+
+## 扩展方向
+
+- 会话记忆持久化（Redis / 数据库），支持多实例水平扩展；
+- 接入真实订单 / CRM 系统与消息队列；
+- 模型按节点差异化选型（路由用低成本模型，专家用强模型）；
+- LLM-as-judge 开放题评分，扩充评测维度。
+
