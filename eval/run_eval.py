@@ -263,13 +263,13 @@ async def main():
     if not cases:
         raise SystemExit("没有可跑的用例")
 
-    results = []
-    total_latency = 0.0
-    total_turns = 0
-    total_input = 0
-    total_output = 0
-    task_pass = 0
-    trajectory_pass = 0
+    results = []  # 保存每条用例完整运行结果的列表
+    total_latency = 0.0  # 总耗时（秒，浮点数）
+    total_turns = 0  # 总对话轮次
+    total_input = 0  # 输入token总数
+    total_output = 0  # 输出token总数
+    task_pass = 0  # 任务通过的用例数量（任务级通过率）
+    trajectory_pass = 0  # 执行轨迹通过数量（过程/步骤是否正确）
 
     for index, case in enumerate(cases, start=1):
         print(f"\n[{index}/{len(cases)}] 运行: {_fmt_case(case)}")

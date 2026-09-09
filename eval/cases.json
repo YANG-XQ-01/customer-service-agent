@@ -189,6 +189,31 @@
       "must_not_contain": [],
       "needs_human": true
     }
+  },
+  {
+    "id": "after-sales-missing",
+    "description": "丢件理赔：无订单号时应礼貌索要订单号并简述处理路径",
+    "messages": ["快递丢件了，我不要补发，直接给我赔钱"],
+    "expect": {
+      "intent": "after_sale",
+      "tools_required": [],
+      "must_contain": ["丢件", "订单号"],
+      "must_not_contain": [],
+      "needs_human": false
+    }
+  },
+  {
+    "id": "hurry-up",
+    "description": "催发货：先查订单状态（待发货）",
+    "messages": ["我的订单20260901003怎么还没发货"],
+    "expect": {
+      "intent": "order",
+      "tools_required": [
+        {"name": "query_order_by_no", "args": {"order_no": "20260901003"}}
+      ],
+      "must_contain": ["待发货"],
+      "must_not_contain": ["工单号"],
+      "needs_human": false
+    }
   }
 ]
-
