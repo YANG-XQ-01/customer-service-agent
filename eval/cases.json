@@ -104,7 +104,7 @@
     "expect": {
       "intent": "after_sale",
       "tools_required": [
-        {"name": "request_human_handoff", "args": {}}
+        {"name": "query_order_by_no", "args": {"order_no": "20260901004"}}
       ],
       "must_contain": ["工单号", "人工"],
       "must_not_contain": [],
@@ -171,7 +171,7 @@
     "expect": {
       "intent": "after_sale",
       "tools_required": [
-        {"name": "request_human_handoff", "args": {}}
+        {"name": "query_order_by_no", "args": {"order_no": "20260901004"}}
       ],
       "must_contain": ["人工"],
       "must_not_contain": [],

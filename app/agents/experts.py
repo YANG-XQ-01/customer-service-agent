@@ -5,11 +5,13 @@
 闲聊和兜底不需要工具，直接调模型即可——不是每个节点都要是 Agent。
 """
 import logging
+import re
 import time
 
 from langchain.agents import create_agent
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 
+from app import config
 from app.agents.prompts import (
     AFTER_SALE_SYSTEM,
     CHAT_SYSTEM,
@@ -95,6 +97,27 @@ def _extract_handoff_marker(messages) -> tuple | None:
     return None
 
 
+def _find_over_threshold_order(messages) -> tuple | None:
+    """代码层兜底：检查售后 Agent 是否查到了超阈值订单。
+
+    背景：模型有时查到 ¥2999 却“只说不调工具”。提示词拦不住时，
+    这里直接看 query_order_by_no 的工具返回，金额超阈值就强制转人工。
+    返回 (order_no, amount) 或 None。
+    """
+    for message in messages:
+        if not isinstance(message, ToolMessage):
+            continue
+        if getattr(message, "name", "") != "query_order_by_no":
+            continue
+        content = str(message.content)
+        amount_match = re.search(r"实付金额：¥([\d.]+)", content)
+        order_match = re.search(r"订单号：([A-Za-z0-9]+)", content)
+        if amount_match and float(amount_match.group(1)) > config.REFUND_THRESHOLD:
+            order_no = order_match.group(1) if order_match else "未知"
+            return order_no, amount_match.group(1)
+    return None
+
+
 async def after_sale_agent_node(state: AgentState) -> dict:
     """售后专家：比其它专家多一道“转人工”检查。
 
@@ -121,6 +144,22 @@ async def after_sale_agent_node(state: AgentState) -> dict:
             "handoff_reason": reason,
             "messages": [],  # 不追加普通回答，最终话术由转人工节点生成
             "trace": [f"售后专家 {elapsed:.2f}s (触发转人工)"],
+        }
+
+    # 代码层兜底：模型没自觉调转人工工具，但订单金额确实超阈值
+    over_threshold = _find_over_threshold_order(result["messages"])
+    if over_threshold is not None:
+        order_no, amount = over_threshold
+        reason = (
+            f"订单{order_no}实付金额¥{amount}超过人工审核阈值"
+            f"¥{config.REFUND_THRESHOLD}，需人工审核"
+        )
+        logger.info(">>> 售后专家代码层强制转人工: %s (%.2fs)", reason, elapsed)
+        return {
+            "handoff_requested": True,
+            "handoff_reason": reason,
+            "messages": [],
+            "trace": [f"售后专家 {elapsed:.2f}s (金额超阈值，代码强制转人工)"],
         }
 
     final_message = result["messages"][-1]
