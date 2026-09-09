@@ -7,6 +7,30 @@
 本项目是边学边做的教学项目，路线是：先写一个会调工具的单 Agent 建立直觉，
 再演进成 LangGraph 多智能体，最后做评测、优化与部署。
 
+## 系统架构
+
+```mermaid
+flowchart LR
+    U[用户网页消息] --> API[FastAPI /api/chat]
+    API --> G[LangGraph 多智能体图]
+    G --> R{路由节点<br/>意图分类}
+    R -- order --> OA[订单专家]
+    R -- after_sale --> AS[售后专家]
+    R -- knowledge --> KA[知识专家]
+    R -- chat --> C[闲聊节点]
+    R -- clarify / 失败 --> H[转人工节点]
+    OA --> M[(MySQL 订单/售后)]
+    AS --> M
+    AS --> K[(Milvus 知识库)]
+    KA --> K
+    H --> HW[人工工作台 /human]
+    OA & AS & KA & C & H -->|最终回答| API
+```
+
+数据边界：订单/售后等结构化事实走 MySQL 工具精确查询；
+商品/政策等开放知识走 Milvus 检索（RAG）。两个都接上，
+Agent 才能分清“查订单要调工具、问政策要去检索”。
+
 ## 技术栈
 
 | 层 | 选择 | 说明 |
