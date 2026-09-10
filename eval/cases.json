@@ -215,5 +215,16 @@
       "must_not_contain": ["工单号"],
       "needs_human": false
     }
+  },
+  {
+    "id": "order-no-format-rule",
+    "description": "未提供订单号时不得编造格式（回归：曾称16位字母数字组合）",
+    "messages": ["我要退款"],
+    "expect": {
+      "tools_required": [],
+      "must_contain": ["订单号"],
+      "must_not_contain": ["16位", "字母", "XD20"],
+      "needs_human": false
+    }
   }
 ]

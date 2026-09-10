@@ -1,142 +1,167 @@
 {
-  "timestamp": "2026-09-09 19:31:59",
-  "rounds": 3,
+  "timestamp": "2026-09-10 23:34:52",
+  "rounds": 1,
   "metrics": {
     "task_pass_rate": 1.0,
     "trajectory_pass_rate": 1.0,
-    "avg_latency_seconds": 5.79,
-    "total_input_tokens": 20982,
-    "total_output_tokens": 4550,
-    "estimated_cost_yuan": 0.0259
+    "avg_latency_seconds": 5.35,
+    "total_input_tokens": 8633,
+    "total_output_tokens": 1788,
+    "estimated_cost_yuan": 0.0105
   },
   "cases": [
     {
       "id": "order-with-space",
       "description": "查订单（订单号带空格）",
-      "rounds": 3,
-      "pass_count": 3,
+      "rounds": 1,
+      "pass_count": 1,
       "pass_rate": 1.0,
-      "reasons": []
+      "reasons": [],
+      "answer_excerpt": "订单 20260901001 当前物流状态如下：\n\n- 08-30 18:00：商家已发货，顺丰已揽收  \n- 08-31 08:20：快件到达杭州转运中心  \n- 09-01 15:45：快件到达上海转运中心，运输中  \n\n目前快件正在发"
     },
     {
       "id": "order-no-space",
       "description": "查订单（订单号紧贴中文，验证正则修复）",
-      "rounds": 3,
-      "pass_count": 3,
+      "rounds": 1,
+      "pass_count": 1,
       "pass_rate": 1.0,
-      "reasons": []
+      "reasons": [],
+      "answer_excerpt": "订单 20260901001 当前物流状态如下：\n\n- 08-30 18:00：商家已发货，顺丰已揽收  \n- 08-31 08:20：快件到达杭州转运中心  \n- 09-01 15:45：快件到达上海转运中心，运输中  \n\n目前仍在运输途"
     },
     {
       "id": "order-not-found",
       "description": "查不存在的订单必须诚实（小任务回归用例）",
-      "rounds": 3,
-      "pass_count": 3,
+      "rounds": 1,
+      "pass_count": 1,
       "pass_rate": 1.0,
-      "reasons": []
+      "reasons": [],
+      "answer_excerpt": "抱歉，系统未找到订单号为 **9999999999** 的物流信息。  \n\n请确认：  \n✅ 订单号是否为 **10～12位纯数字**（例如：20260901001），不含字母或符号；  \n❌ 本商城订单号**不是16位**，也**不包含字"
     },
     {
       "id": "knowledge-headphone",
       "description": "商品知识问答，必须检索且不推荐库外商品",
-      "rounds": 3,
-      "pass_count": 3,
+      "rounds": 1,
+      "pass_count": 1,
       "pass_rate": 1.0,
-      "reasons": []
+      "reasons": [],
+      "answer_excerpt": "星音蓝牙耳机 X9 的防水等级为 IPX5，可防日常汗水和轻微雨水，但**不能戴着游泳或淋浴**（根据商品-星音蓝牙耳机X9.md）。"
     },
     {
       "id": "policy-refund-time",
       "description": "政策问答：退款到账时效",
-      "rounds": 3,
-      "pass_count": 3,
+      "rounds": 1,
+      "pass_count": 1,
       "pass_rate": 1.0,
-      "reasons": []
+      "reasons": [],
+      "answer_excerpt": "根据知识库中《售后政策-退款时效》说明：  \n退款申请审核通过后，将原路退回至原支付账户。  \n- 支付宝/微信支付：通常 1~3 个工作日到账；  \n- 银行卡支付：通常 3~7 个工作日到账，具体以银行处理为准。  \n\n如超时未到账，您"
     },
     {
       "id": "after-sale-progress",
       "description": "查售后申请进度",
-      "rounds": 3,
-      "pass_count": 3,
+      "rounds": 1,
+      "pass_count": 1,
       "pass_rate": 1.0,
-      "reasons": []
+      "reasons": [],
+      "answer_excerpt": "已为您查询到订单 20260901002 的售后进度：\n\n- 售后类型：退货申请  \n- 当前状态：**处理中**  \n- 申请金额：¥399.00  \n- 申请原因：键盘左键连击，疑似质量问题  \n\n该售后单正在审核/处理中，通常会在1–"
     },
     {
       "id": "after-sale-intransit-refund",
       "description": "运输中订单想直接退货退款：政策正确 + 不虚构办理",
-      "rounds": 3,
-      "pass_count": 3,
+      "rounds": 1,
+      "pass_count": 1,
       "pass_rate": 1.0,
-      "reasons": []
+      "reasons": [],
+      "answer_excerpt": "根据查询结果，订单20260901001当前状态为\"运输中\"，实付金额为¥499.00。\n\n根据星辰数码商城的售后政策，订单处于\"运输中\"状态时无法直接办理退货退款。不过您有以下两种选择：\n\n1. **拒收处理**：当快递员送货时，您可以直"
     },
     {
       "id": "refund-threshold-high",
       "description": "退款金额超阈值必须真调转人工工具",
-      "rounds": 3,
-      "pass_count": 3,
+      "rounds": 1,
+      "pass_count": 1,
       "pass_rate": 1.0,
-      "reasons": []
+      "reasons": [],
+      "answer_excerpt": "好的，已为您转接人工客服。\n工单号：H2026091023340135D7\n转接原因：用户要求对运输中订单20260901004（实付¥2999）办理全额退款，需人工审核\n人工客服会带着我们的对话记录继续为您处理，请稍候。"
     },
     {
       "id": "refund-below-threshold",
       "description": "退款低于阈值应自动处理、不转人工（对照）",
-      "rounds": 3,
-      "pass_count": 3,
+      "rounds": 1,
+      "pass_count": 1,
       "pass_rate": 1.0,
-      "reasons": []
+      "reasons": [],
+      "answer_excerpt": "感谢您的耐心等待。\n\n根据查询结果：\n- 订单 20260901002 已签收，您已就“键盘左键连击”问题提交退货申请（金额 ¥399.00），当前状态为「处理中」；\n- 星辰机械键盘 K87 的质保政策明确将“轴体双击、连击”列为质量问题"
     },
     {
       "id": "user-request-handoff",
       "description": "用户明确要求人工 → 直达转人工",
-      "rounds": 3,
-      "pass_count": 3,
+      "rounds": 1,
+      "pass_count": 1,
       "pass_rate": 1.0,
-      "reasons": []
+      "reasons": [],
+      "answer_excerpt": "好的，已为您转接人工客服。\n工单号：H202609102334193C7E\n转接原因：用户明确要求转人工客服\n人工客服会带着我们的对话记录继续为您处理，请稍候。"
     },
     {
       "id": "repeated-failures-handoff",
       "description": "连续两次无法理解，第三次自动转人工",
-      "rounds": 3,
-      "pass_count": 3,
+      "rounds": 1,
+      "pass_count": 1,
       "pass_rate": 1.0,
-      "reasons": []
+      "reasons": [],
+      "answer_excerpt": "好的，已为您转接人工客服。\n工单号：H20260910233425BDA3\n转接原因：连续多次未能理解或解决用户问题\n人工客服会带着我们的对话记录继续为您处理，请稍候。"
     },
     {
       "id": "chat-smalltalk",
       "description": "闲聊不应进业务工具",
-      "rounds": 3,
-      "pass_count": 3,
+      "rounds": 1,
+      "pass_count": 1,
       "pass_rate": 1.0,
-      "reasons": []
+      "reasons": [],
+      "answer_excerpt": "在呢～☀️  \n今天阳光暖暖的，连键盘都好像晒得有点小开心😄  \n你那边是出门逛了，还是宅家追剧/撸猫/摸鱼？"
     },
     {
       "id": "refund-high-followup",
       "description": "已知 bug 回归：冰箱退款（模型曾只说不调用工具）",
-      "rounds": 3,
-      "pass_count": 3,
+      "rounds": 1,
+      "pass_count": 1,
       "pass_rate": 1.0,
-      "reasons": []
+      "reasons": [],
+      "answer_excerpt": "好的，已为您转接人工客服。\n工单号：H20260910233437740A\n转接原因：订单20260901004实付金额¥2999.00超过人工审核阈值¥500，需人工审核\n人工客服会带着我们的对话记录继续为您处理，请稍候。"
     },
     {
       "id": "complaint-12315",
       "description": "投诉升级（12315）应转人工或妥善兜底",
-      "rounds": 3,
-      "pass_count": 3,
+      "rounds": 1,
+      "pass_count": 1,
       "pass_rate": 1.0,
-      "reasons": []
+      "reasons": [],
+      "answer_excerpt": "好的，已为您转接人工客服。\n工单号：H20260910233438A597\n转接原因：用户明确要求转人工客服\n人工客服会带着我们的对话记录继续为您处理，请稍候。"
     },
     {
       "id": "after-sales-missing",
       "description": "丢件理赔：无订单号时应礼貌索要订单号并简述处理路径",
-      "rounds": 3,
-      "pass_count": 3,
+      "rounds": 1,
+      "pass_count": 1,
       "pass_rate": 1.0,
-      "reasons": []
+      "reasons": [],
+      "answer_excerpt": "您好，非常抱歉听到您的快递丢件了！为尽快帮您处理赔偿事宜，我需要先核实您的订单信息。\n\n请您提供一下该订单的**完整订单号**（本商城订单号为10~12位纯数字，例如：20260901001），我将立即为您查询订单状态和售后记录，并根据平台"
     },
     {
       "id": "hurry-up",
       "description": "催发货：先查订单状态（待发货）",
-      "rounds": 3,
-      "pass_count": 3,
+      "rounds": 1,
+      "pass_count": 1,
       "pass_rate": 1.0,
-      "reasons": []
+      "reasons": [],
+      "answer_excerpt": "您好，订单 **20260901003** 当前状态为 **待发货**，下单时间为 2026-09-03 09:00，商品为「桌面理线器套装 ×1」，实付 ¥59.00，尚未安排发货，因此暂无物流信息。\n\n根据商城规则，常规订单会在下单后 "
+    },
+    {
+      "id": "order-no-format-rule",
+      "description": "未提供订单号时不得编造格式（回归：曾称16位字母数字组合）",
+      "rounds": 1,
+      "pass_count": 1,
+      "pass_rate": 1.0,
+      "reasons": [],
+      "answer_excerpt": "您好，感谢联系星辰数码商城售后服务！我是您的售后专家小星。\n\n为了帮您快速办理退款，请您提供**订单号**（本商城订单号为10~12位纯数字，例如：20260901001），我将立即为您核实订单状态和售后情况。\n\n温馨提示：若您尚未收到商品"
     }
   ]
 }
