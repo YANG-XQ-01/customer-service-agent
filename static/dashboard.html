@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>客服 Agent 值班台</title>
+  <style>
+    :root {
+      --base: #eef2f5;
+      --surface: #ffffff;
+      --ink: #12222e;
+      --muted: #63798a;
+      --hairline: #d6dee5;
+      --accent: #16697a;
+      --ok: #2f7d5b;
+      --warn: #b5732f;
+      --bad: #a4413a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--base); color: var(--ink);
+      font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      font-size: 13px; line-height: 1.5; padding: 22px;
+      font-variant-numeric: tabular-nums;
+    }
+    .wrap { max-width: 1160px; margin: 0 auto; }
+
+    /* 顶部值班条：整个页面的“英雄位”，只放服务状态与运行时长 */
+    .pager {
+      display: flex; align-items: baseline; gap: 18px;
+      padding-bottom: 14px; border-bottom: 2px solid var(--ink);
+    }
+    .pager h1 { font-size: 22px; letter-spacing: .02em; font-weight: 700; }
+    .pager .live { color: var(--ok); font-weight: 700; }
+    .pager .live.down { color: var(--bad); }
+    .pager .meta { margin-left: auto; color: var(--muted); }
+
+    /* 关键数字带：用细线分隔，不做卡片 */
+    .strip { display: flex; border-bottom: 1px solid var(--hairline); }
+    .strip div { flex: 1; padding: 16px 18px 14px 0; border-right: 1px solid var(--hairline); }
+    .strip div:last-child { border-right: 0; }
+    .strip .k { color: var(--muted); font-size: 12px; }
+    .strip .v { font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+    .strip .v.warn { color: var(--warn); }
+    .strip .v.bad { color: var(--bad); }
+    .strip .unit { font-size: 13px; color: var(--muted); font-weight: 400; margin-left: 3px; }
+
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; padding-top: 18px; }
+    h2 {
+      font-size: 13px; font-weight: 700; color: var(--accent);
+      padding-bottom: 5px; border-bottom: 1px solid var(--hairline); margin-bottom: 10px;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 5px 0; border-bottom: 1px dotted var(--hairline); vertical-align: top; }
+    td.num { text-align: right; color: var(--muted); }
+    .band { margin: 4px 0 12px; }
+    .band-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+    .band-row .label { width: 44px; color: var(--muted); }
+    .band-row .track { flex: 1; height: 14px; background: #e2e9ee; }
+    .band-row .fill { height: 100%; background: var(--accent); }
+    .band-row .val { width: 74px; text-align: right; }
+    .alert { padding: 6px 0; color: var(--warn); }
+    .alert.bad { color: var(--bad); }
+    .empty { color: var(--muted); padding: 4px 0; }
+    footer {
+      margin-top: 22px; padding-top: 10px; border-top: 1px solid var(--hairline);
+      color: var(--muted); display: flex; gap: 18px; flex-wrap: wrap;
+    }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 5px; }
+    .dot.down { background: var(--bad); }
+    @media (max-width: 780px) {
+      .strip { flex-wrap: wrap; }
+      .strip div { flex: 1 1 45%; border-right: 0; }
+      .cols { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="pager">
+      <h1>客服 Agent 值班台</h1>
+      <span id="live" class="live">● 运行中</span>
+      <span class="meta" id="meta">等待数据…</span>
+    </div>
+
+    <div class="strip">
+      <div><div class="k">近 60s 请求量</div><div class="v" id="rps">0<span class="unit">次</span></div></div>
+      <div><div class="k">延迟 P95</div><div class="v" id="p95">0<span class="unit">ms</span></div></div>
+      <div><div class="k">5xx 错误</div><div class="v" id="err5xx">0</div></div>
+      <div><div class="k">LLM 调用</div><div class="v" id="llmcalls">0</div></div>
+      <div><div class="k">估算成本</div><div class="v" id="cost">¥0</div></div>
+      <div><div class="k">工单</div><div class="v" id="tickets">0</div></div>
+    </div>
+
+    <div class="cols">
+      <section>
+        <h2>延迟分布（近 5 分钟）</h2>
+        <div class="band" id="latency"></div>
+        <h2>状态码</h2>
+        <table id="status-table"></table>
+        <h2>限流与异常</h2>
+        <div id="alerts"></div>
+      </section>
+
+      <section>
+        <h2>工具调用</h2>
+        <table id="tools-table"></table>
+        <h2>转人工触发</h2>
+        <table id="handoff-table"></table>
+        <h2>当前配置</h2>
+        <table id="config-table"></table>
+      </section>
+    </div>
+
+    <footer>
+      <span id="deps"></span>
+      <span id="updated"></span>
+      <span>每 3 秒自动刷新 · 数据来自 /api/metrics</span>
+    </footer>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function rows(table, pairs, emptyText) {
+      if (!pairs.length) { table.innerHTML = `<tr><td class="empty">${emptyText}</td></tr>`; return; }
+      table.innerHTML = pairs.map(([k, v]) => `<tr><td>${k}</td><td class="num">${v}</td></tr>`).join("");
+    }
+
+    function render(data) {
+      const m = data.metrics;
+      $("meta").textContent = `运行 ${Math.round(m.uptime_seconds / 60)} 分钟`;
+      $("rps").innerHTML = `${m.requests.qps_last_60s.toFixed(2)}<span class="unit">次/秒</span>`;
+      $("p95").innerHTML = `${m.latency_ms.p95}<span class="unit">ms</span>`;
+      $("err5xx").textContent = m.requests.errors_5xx;
+      $("err5xx").className = "v" + (m.requests.errors_5xx > 0 ? " bad" : "");
+      $("llmcalls").textContent = m.llm.calls;
+      $("cost").textContent = "¥" + m.llm.estimated_cost_yuan;
+      $("tickets").textContent = data.tickets.total;
+
+      const lat = m.latency_ms;
+      const max = Math.max(lat.p99, lat.p95, lat.p50, 1);
+      $("latency").innerHTML = ["p50", "p95", "p99", "max"].map((key) => {
+        const value = lat[key] || 0;
+        const width = Math.max(2, Math.round((value / max) * 100));
+        return `<div class="band-row"><span class="label">${key}</span>
+          <span class="track"><span class="fill" style="width:${width}%"></span></span>
+          <span class="val">${value} ms</span></div>`;
+      }).join("") + `<div class="empty">样本 ${lat.samples} 条</div>`;
+
+      rows($("status-table"), Object.entries(m.requests.status_counts), "暂无请求");
+      rows($("tools-table"), Object.entries(m.tools).slice(0, 6), "暂无工具调用");
+      rows($("handoff-table"), Object.entries(m.handoffs), "暂无转人工");
+      rows($("config-table"), [
+        ["模型", data.config.model],
+        ["退款阈值", "¥" + data.config.refund_threshold],
+        ["聊天限流", data.config.rate_limit_chat_per_min + " 次/分钟"],
+        ["登录限流", data.config.rate_limit_auth_per_min + " 次/分钟"],
+        ["登录锁定阈值", data.config.login_max_failures + " 次"],
+      ], "无");
+
+      const limitHits = Object.entries(m.rate_limited);
+      const alerts = [];
+      if (m.requests.errors_5xx > 0) alerts.push(`<div class="alert bad">5xx 错误 ${m.requests.errors_5xx} 次，请查服务日志</div>`);
+      if (m.unhandled_errors > 0) alerts.push(`<div class="alert bad">未处理异常 ${m.unhandled_errors} 次</div>`);
+      limitHits.forEach(([scope, count]) => alerts.push(`<div class="alert">${scope} 限流命中 ${count} 次</div>`));
+      $("alerts").innerHTML = alerts.length ? alerts.join("") : '<div class="empty">无告警</div>';
+
+      const redisOk = data.deps.redis, mysqlOk = data.deps.mysql;
+      $("deps").innerHTML = `<span class="dot ${redisOk ? "" : "down"}"></span>Redis ${redisOk ? "正常" : "异常"}`
+        + ` &nbsp; <span class="dot ${mysqlOk ? "" : "down"}"></span>MySQL ${mysqlOk ? "正常" : "异常"}`
+        + ` &nbsp; 集合 ${data.deps.milvus_collection}`;
+    }
+
+    async function poll() {
+      try {
+        const res = await fetch("/api/metrics");
+        render(await res.json());
+        $("live").className = "live";
+        $("live").textContent = "● 运行中";
+        $("updated").textContent = "更新于 " + new Date().toLocaleTimeString();
+      } catch (err) {
+        $("live").className = "live down";
+        $("live").textContent = "● 无法连接";
+      }
+    }
+    poll();
+    setInterval(poll, 3000);
+  </script>
+</body>
+</html>
+

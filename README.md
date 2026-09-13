@@ -23,6 +23,9 @@
   人工工作台实时查看，服务重启不丢工单；
 - **限流与登录安全**：聊天按用户/IP 限流（默认 20 次/分钟）、注册登录按 IP 限流
   （10 次/分钟），连续 5 次登录失败锁定 5 分钟，超限统一返回 429；
+- **可观测与压测**：HTTP 中间件统计请求量/状态码/延迟分布；工具调用、LLM 调用与
+  token 成本、转人工触发、限流命中全部埋点；`/dashboard` 值班台看板实时展示，
+  `scripts/loadtest.py` 提供零依赖压测（健康检查模式不消耗模型额度）；
 - **回归评测体系**：17 用例覆盖订单/知识/售后/转人工/边界场景（含订单号格式回归），
   支持 `--rounds 3` 多轮稳定性验证；当前基线 48/48 通过（完成率 100%、
   轨迹正确率 100%，单轮平均约 ¥0.01）；
@@ -131,7 +134,9 @@ docker compose up -d app
 
 - 客服页面：<http://127.0.0.1:8010>
 - 人工工作台：<http://127.0.0.1:8010/human>
+- 监控看板：<http://127.0.0.1:8010/dashboard>
 - 健康检查：`GET /health`
+- 运行指标：`GET /api/metrics`
 - 工单接口：`GET /api/handoffs`
 - 用户接口：`POST /api/register`、`POST /api/login`、`POST /api/logout`
 - 历史接口：`GET /api/history?token=...`
@@ -150,6 +155,25 @@ python -m eval.run_eval --case refund-threshold-high
 
 输出：任务完成率 / 轨迹正确率 / 平均耗时 / 估算成本，结果写入 `eval/report.json`；
 多轮模式会列出通过率 < 100% 的不稳定用例及失败原因。
+
+## 压测与监控
+
+```powershell
+# 健康检查压测（不调用模型，验证并发与吞吐）
+python scripts/loadtest.py --mode health --users 10 --requests 10
+
+# 真实聊天压测（会调用模型，建议小并发）
+python scripts/loadtest.py --mode chat --users 3 --requests 1
+```
+
+压测输出：总请求、吞吐（req/s）、成功/限流/失败数量、p50/p95/p99 延迟。
+压测后打开 `/dashboard` 可以看到本次流量产生的指标。
+
+看板指标：近 60s 请求量、延迟 p50/p95/p99、5xx 错误、LLM 调用与 token 成本、
+工具调用次数、转人工触发分布、限流命中、工单总数、Redis/MySQL 依赖健康。
+
+注意：指标存在进程内存中，只反映当前 worker；多 worker 或生产环境建议
+改为 Redis 计数或接入 Prometheus + Grafana（见 docs/walkthrough.md 第 12 节）。
 
 ## API 示例
 

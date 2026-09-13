@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import BaseModel, Field
 
-from app import config, store
+from app import config, metrics, store
 from app.graph import agent_graph
 from app.memory import (
     add_message,
@@ -43,6 +43,24 @@ logger.info("人工审核退款阈值: ¥%s | Redis: %s:%s/%s",
             config.REFUND_THRESHOLD, config.REDIS_HOST, config.REDIS_PORT, config.REDIS_DB)
 
 app = FastAPI(title="电商智能客服 Agent", version="0.4.0")
+
+
+@app.middleware("http")
+async def _metrics_middleware(request: Request, call_next):
+    """统计每个 HTTP 请求的状态码与耗时，供监控看板使用。"""
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        metrics.record_request(request.url.path, 500, (time.perf_counter() - started) * 1000)
+        metrics.record_error()
+        raise
+    metrics.record_request(
+        request.url.path, response.status_code, (time.perf_counter() - started) * 1000
+    )
+    if response.status_code >= 500:
+        metrics.record_error()
+    return response
 
 
 # ---------------- 请求/响应模型 ----------------
@@ -102,6 +120,49 @@ async def health():
     return {"status": "ok", "redis": store.ping()}
 
 
+@app.get("/dashboard")
+async def dashboard_page():
+    """监控看板页面。"""
+    return FileResponse(config.BASE_DIR / "static" / "dashboard.html")
+
+
+def _mysql_ok() -> bool:
+    """轻量探活：执行一次 SELECT 1。"""
+    try:
+        from sqlalchemy import text
+
+        from app.db import engine
+
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
+
+
+@app.get("/api/metrics")
+async def api_metrics():
+    """监控看板数据接口：运行指标 + 配置 + 依赖健康。"""
+    return {
+        "metrics": metrics.snapshot(),
+        "deps": {
+            "redis": store.ping(),
+            "mysql": _mysql_ok(),
+            "milvus_collection": config.MILVUS_COLLECTION,
+        },
+        "config": {
+            "model": config.QWEN_CHAT_MODEL,
+            "refund_threshold": config.REFUND_THRESHOLD,
+            "rate_limit_chat_per_min": config.RATE_LIMIT_CHAT_PER_MIN,
+            "rate_limit_auth_per_min": config.RATE_LIMIT_AUTH_PER_MIN,
+            "login_max_failures": config.LOGIN_MAX_FAILURES,
+        },
+        "tickets": {
+            "total": len(store.list_handoff_tickets(500)),
+        },
+    }
+
+
 @app.get("/api/handoffs")
 async def handoffs():
     """人工工作台接口：返回全部工单（最新在前）。"""
@@ -123,6 +184,7 @@ def _enforce_rate_limit(identity: str, scope: str, limit: int, window: int = 60)
     """固定窗口限流：超过限制抛 429，前端提示稍后再试。"""
     count = store.incr_window(f"{scope}:{identity}", window)
     if count > limit:
+        metrics.record_rate_limit(scope)
         logger.warning("触发限流: scope=%s identity=%s count=%s", scope, identity, count)
         raise HTTPException(
             status_code=429,
@@ -260,6 +322,7 @@ async def chat(req: ChatRequest, request: Request):
     final_message = output["messages"][-1]
     reply = final_message.content
     prompt_tokens, completion_tokens = _read_token_usage(final_message)
+    metrics.record_llm_call(prompt_tokens, completion_tokens)
 
     logger.info(">>> 图节点轨迹: %s", " -> ".join(output.get("trace", [])))
     logger.info("总耗时: %.2fs | 输入tokens: %s | 输出tokens: %s",

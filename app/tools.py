@@ -12,6 +12,7 @@ from langchain_core.tools import tool
 
 from app import config
 from app.db import SessionLocal
+from app import metrics
 from app.models import AfterSale, LogisticsEvent, Order, OrderItem
 from app.store import new_ticket_id
 
@@ -27,6 +28,7 @@ def _log_tool_call(name: str, params: str, result: str, elapsed: float) -> None:
     logger.info(">>> 调用工具: %s", name)
     logger.info(">>> 工具参数: %s", params)
     logger.info(">>> 工具返回(%.2f秒): %s", elapsed, result)
+    metrics.record_tool(name)
 
 
 def _query_order_rows(order_no: str):

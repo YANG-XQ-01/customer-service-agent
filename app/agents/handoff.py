@@ -4,6 +4,7 @@ import time
 
 from langchain_core.messages import AIMessage, AnyMessage
 
+from app import metrics
 from app.state import AgentState
 from app.store import create_handoff_ticket, new_ticket_id
 
@@ -50,6 +51,7 @@ async def handoff_node(state: AgentState) -> dict:
         extracted=state.get("extracted", {}),
         messages=history,
     )
+    metrics.record_handoff(trigger)
     elapsed = time.perf_counter() - start
     logger.info(">>> 转人工工单 %s | 触发=%s | 原因=%s | 对话%s条 (%.2fs)",
                 ticket_id, trigger, reason, len(history), elapsed)
