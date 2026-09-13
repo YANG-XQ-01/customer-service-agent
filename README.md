@@ -104,6 +104,9 @@ customer-service-agent/
 
 ## 快速开始
 
+> 想按“从零到一”的顺序理解整个项目，看 [docs/walkthrough.md](docs/walkthrough.md)：
+> 每一步的为什么、关键代码、验证方式与踩坑记录。
+
 ### 本地开发
 
 ```powershell
