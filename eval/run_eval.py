@@ -120,9 +120,10 @@ async def _run_one_case(case: dict) -> dict:
         get_attempts,
         get_messages,
         increment_attempts,
-        list_handoff_tickets,
         reset_attempts,
     )
+    # 工单已迁到 Redis（app/store.py），评测也要从新位置读取
+    from app.store import list_handoff_tickets
 
     session_id = "eval-" + case["id"] + "-" + uuid.uuid4().hex[:6]
     reset_attempts(session_id)
@@ -236,6 +237,8 @@ def _fmt_case(case: dict) -> str:
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rounds", type=int, default=1, help="每个用例跑几轮（默认 1）")
+    parser.add_argument("--case-timeout", type=float, default=180.0,
+                        help="单个用例超时秒数，超时记为失败并继续（默认 180）")
     parser.add_argument("--limit", type=int, default=None, help="只跑前 N 个用例")
     parser.add_argument("--case", type=str, default=None, help="只跑指定 id 的用例")
     args = parser.parse_args()
@@ -252,7 +255,30 @@ async def main():
     for case in cases:
         print(f"\n运行: {_fmt_case(case)} x{args.rounds} 轮")
         for round_index in range(1, args.rounds + 1):
-            result = await _run_one_case(case)
+            try:
+                # 单个用例超时保护：模型或依赖卡住时不拖垮整轮评测
+                result = await asyncio.wait_for(
+                    _run_one_case(case), timeout=args.case_timeout
+                )
+            except asyncio.TimeoutError:
+                print(f"  轮{round_index}: FAIL | 用例超时（>{args.case_timeout:.0f}s）")
+                all_results.append(
+                    {
+                        "case": case,
+                        "answer": "",
+                        "latencies": [args.case_timeout],
+                        "total_input": 0,
+                        "total_output": 0,
+                        "actual_intent": None,
+                        "actual_tools": [],
+                        "new_ticket": None,
+                        "passed": False,
+                        "trajectory_ok": False,
+                        "reasons": [f"用例超时（>{args.case_timeout:.0f}s），已跳过并继续"],
+                        "round": round_index,
+                    }
+                )
+                continue
             grade = _grade(result)
             status = "PASS" if grade["passed"] else "FAIL"
             print(f"  轮{round_index}: {status} | 意图={result['actual_intent']} | "

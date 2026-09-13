@@ -151,10 +151,12 @@ MySQL / Milvus 端口不映射宿主机，仅容器内部网络互通，避免�
 python -m eval.run_eval              # 单轮全量
 python -m eval.run_eval --rounds 3   # 多轮稳定性模式
 python -m eval.run_eval --case refund-threshold-high
+python -m eval.run_eval --case-timeout 60   # 单用例超时保护（默认 180s）
 ```
 
 输出：任务完成率 / 轨迹正确率 / 平均耗时 / 估算成本，结果写入 `eval/report.json`；
 多轮模式会列出通过率 < 100% 的不稳定用例及失败原因。
+单个用例超时会记为失败并继续，避免模型侧卡顿拖垮整轮评测。
 
 ## 压测与监控
 

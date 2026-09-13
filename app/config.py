@@ -24,6 +24,9 @@ QWEN_CHAT_MODEL = os.getenv("QWEN_CHAT_MODEL", "qwen-plus")
 QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 # 随机性：0 最稳定，1 最发散；客服场景后面会调低，先留成可配置
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
+# 单次模型请求超时（秒）与失败重试次数：避免网络卡住把请求拖死
+LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
+LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
 
 # ---- 会话记忆 ----
 # 每个会话最多记住多少轮（1 轮 = 用户 1 句 + 助手 1 句）

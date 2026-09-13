@@ -12,12 +12,18 @@ from app import config
 
 
 def _build_chat_model() -> ChatOpenAI:
-    """返回一个可被 LangChain 调用的聊天模型对象。"""
+    """返回一个可被 LangChain 调用的聊天模型对象。
+
+    显式设置超时与重试：OpenAI SDK 默认单次请求可等待 10 分钟，
+    模型或网络卡住时会把接口/评测整体拖死（我们真实踩过）。
+    """
     return ChatOpenAI(
         model=config.QWEN_CHAT_MODEL,
         api_key=config.DASHSCOPE_API_KEY,
         base_url=config.QWEN_BASE_URL,
         temperature=config.LLM_TEMPERATURE,
+        timeout=config.LLM_TIMEOUT_SECONDS,
+        max_retries=config.LLM_MAX_RETRIES,
     )
 
 
@@ -35,4 +41,3 @@ def get_chat_model() -> ChatOpenAI:
 
 # 兼容旧引用：main.py 之前用 create_chat_model() 创建
 create_chat_model = _build_chat_model
-
