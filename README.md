@@ -25,8 +25,11 @@
   轨迹正确率 100%，单轮平均约 ¥0.01）；
 - **全链路日志**：路由意图、节点进出、工具名称/参数/返回/耗时均落日志，
   可复盘与定位；
+- **用户体系与 Redis 会话缓存**：注册/登录（加盐哈希存密码 + 令牌鉴权），
+  聊天记录与连续失败计数存 Redis（TTL 7 天），刷新页面、重启服务、
+  多 worker 部署都不会丢失历史，多用户会话互相隔离；
 - **容器化交付**：Dockerfile + docker-compose.yml 一键拉起
-  MySQL、Milvus、应用，数据库端口不对外暴露，数据落命名卷。
+  MySQL、Milvus、Redis、应用，数据库端口不对外暴露，数据落命名卷。
 
 ## 系统架构
 
@@ -85,7 +88,8 @@ customer-service-agent/
 │  ├─ tools.py        # 工具层（查订单/物流/售后/知识库/转人工）
 │  ├─ graph.py        # LangGraph 图组装
 │  ├─ state.py        # 图状态定义
-│  ├─ memory.py       # 会话消息 / 连续失败计数 / 工单仓库
+│  ├─ memory.py       # 匿名会话内存存储（工单仓库）
+│  ├─ store.py        # Redis：用户账号 / 令牌 / 聊天记录 / 失败计数
 │  ├─ models.py       # MySQL ORM 模型
 │  └─ main.py         # FastAPI 入口
 ├─ data/knowledge/    # 知识文档（商品、售后政策、物流规则）
@@ -113,7 +117,7 @@ python -m uvicorn app.main:app --port 8000
 
 ```powershell
 docker compose build app
-docker compose up -d mysql milvus
+docker compose up -d mysql milvus redis
 docker compose run --rm app python -m app.seed_data
 docker compose run --rm app python -m app.rag.indexer
 docker compose up -d app
@@ -123,8 +127,11 @@ docker compose up -d app
 - 人工工作台：<http://127.0.0.1:8010/human>
 - 健康检查：`GET /health`
 - 工单接口：`GET /api/handoffs`
+- 用户接口：`POST /api/register`、`POST /api/login`、`POST /api/logout`
+- 历史接口：`GET /api/history?token=...`
 
-MySQL / Milvus 端口不映射宿主机，仅容器内部网络互通，避免与本机服务冲突；
+MySQL / Milvus 端口不映射宿主机，仅容器内部网络互通，避免与本机服务冲突
+（Redis 仅映射到本机 6381，方便本地调试）；
 数据持久化于命名卷，`docker compose down` 不丢数据。
 
 ## 评测

@@ -57,6 +57,34 @@
       max-width: 90%;
       text-align: center;
     }
+    header { display: flex; align-items: center; justify-content: space-between; }
+    .user-bar { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: normal; }
+    .user-bar button {
+      padding: 4px 10px; border: 1px solid rgba(255,255,255,.6); border-radius: 12px;
+      background: transparent; color: #fff; font-size: 12px; cursor: pointer;
+    }
+    .auth-panel {
+      position: fixed; inset: 0; z-index: 20;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+      background: rgba(240, 242, 245, .97); padding: 20px;
+    }
+    .auth-panel[hidden] { display: none; }
+    .auth-panel h2 { font-size: 18px; }
+    .auth-hint { color: #777; font-size: 13px; }
+    .auth-tabs { display: flex; gap: 8px; margin: 6px 0; }
+    .auth-tabs button {
+      padding: 6px 18px; border: 1px solid #2b6de8; border-radius: 16px;
+      background: #fff; color: #2b6de8; cursor: pointer; font-size: 14px;
+    }
+    .auth-tabs button.active { background: #2b6de8; color: #fff; }
+    .auth-panel input {
+      width: 260px; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px;
+    }
+    .auth-panel #auth-submit {
+      width: 260px; padding: 10px 0; border: none; border-radius: 8px;
+      background: #2b6de8; color: #fff; font-size: 15px; cursor: pointer;
+    }
+    .auth-msg { min-height: 18px; color: #c0392b; font-size: 13px; }
     footer {
       display: flex;
       gap: 10px;
@@ -85,7 +113,25 @@
   </style>
 </head>
 <body>
-  <header>🛒 电商智能客服 Agent</header>
+  <header>
+    <span>🛒 电商智能客服 Agent</span>
+    <span id="user-bar" class="user-bar" hidden>
+      <span id="user-name"></span>
+      <button id="logout-btn" type="button">退出</button>
+    </span>
+  </header>
+  <section id="auth-panel" class="auth-panel">
+    <h2 id="auth-title">登录后继续对话</h2>
+    <p class="auth-hint">登录后可保存聊天记录，刷新页面也不会丢。</p>
+    <div class="auth-tabs">
+      <button id="tab-login" type="button" class="active">登录</button>
+      <button id="tab-register" type="button">注册</button>
+    </div>
+    <input id="auth-username" type="text" placeholder="用户名（2~32 位）" autocomplete="username">
+    <input id="auth-password" type="password" placeholder="密码（至少 6 位）" autocomplete="current-password">
+    <button id="auth-submit" type="button">登录</button>
+    <p id="auth-msg" class="auth-msg"></p>
+  </section>
   <main id="chat-box"></main>
   <footer>
     <input id="input" type="text" placeholder="输入你的问题，回车发送" autocomplete="off">

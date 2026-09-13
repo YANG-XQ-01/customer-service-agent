@@ -33,6 +33,14 @@ MEMORY_MAX_TURNS = int(os.getenv("MEMORY_MAX_TURNS", "10"))
 # 退款金额超过该阈值必须转人工审核（元）
 REFUND_THRESHOLD = int(os.getenv("REFUND_THRESHOLD", "500"))
 
+# ---- Redis（用户体系 / 会话与聊天记录缓存）----
+REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+# 聊天记录与登录令牌的过期时间（秒），默认 7 天
+CHAT_HISTORY_TTL = int(os.getenv("CHAT_HISTORY_TTL", str(7 * 24 * 3600)))
+TOKEN_TTL = int(os.getenv("TOKEN_TTL", str(7 * 24 * 3600)))
+
 # ---- MySQL（订单 / 售后数据）----
 MYSQL_HOST = os.getenv("MYSQL_HOST", "127.0.0.1")
 MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))

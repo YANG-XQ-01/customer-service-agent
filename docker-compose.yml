@@ -43,6 +43,20 @@ services:
       retries: 12
       start_period: 60s
 
+  redis:
+    image: redis:6-alpine
+    restart: unless-stopped
+    # 只监听本机，供本机开发/调试连接；生产可去掉这段端口映射
+    ports:
+      - "127.0.0.1:6381:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   app:
     build: .
     restart: unless-stopped
@@ -53,13 +67,17 @@ services:
       # 容器内用服务名互相访问（覆盖 .env 里的 127.0.0.1）
       MYSQL_HOST: mysql
       MILVUS_HOST: milvus
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     depends_on:
       mysql:
         condition: service_healthy
       milvus:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   mysql-data:
   milvus-data:
-
+  redis-data:
