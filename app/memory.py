@@ -1,26 +1,18 @@
-"""进程内存：会话消息 + 连续失败计数 + 转人工工单。
+"""进程内存：匿名会话消息 + 连续失败计数。
 
-为什么先这么做：
-- 零依赖、零配置，马上能跑，适合先理解“记忆”这件事本身；
-- 代价（两个明确的限制，面试常考）：
-  1. 服务重启，记忆就丢；
-  2. 部署多个进程时，各进程各存各的，不共享。
-  这两个限制到后面阶段会用 Redis / 数据库解决，这里先不引入。
+登录用户的会话、计数与工单都已迁移到 Redis（见 app/store.py）；
+这里只保留**未登录（匿名）**场景的兜底存储，以及评测脚本直连图的场景。
+代价很明确（面试常考）：服务重启或起多 worker 时会话不共享。
 
 数据结构：session_id -> 消息列表
 每条消息：{"role": "user" 或 "assistant", "content": "文字内容"}
 """
-from datetime import datetime
-import uuid
-
 from app import config
 
 # 全局内存仓库。FastAPI 单进程内所有请求共享这一个字典。
 _SESSIONS: dict[str, list[dict[str, str]]] = {}
 # 每个会话“连续没能理解/解答”的次数（成功回答会清零）
 _ATTEMPTS: dict[str, int] = {}
-# 转人工工单仓库：ticket_id -> 工单详情（人工工作台从这里读）
-_HANDOFF_TICKETS: dict[str, dict] = {}
 
 
 def get_messages(session_id: str) -> list[dict[str, str]]:
@@ -55,33 +47,3 @@ def increment_attempts(session_id: str) -> int:
 def reset_attempts(session_id: str) -> None:
     """成功回答或转人工后清零（只清连续计数，不删聊天记录）。"""
     _ATTEMPTS.pop(session_id, None)
-
-
-def new_ticket_id() -> str:
-    """生成唯一工单号：H + 时间戳 + 4 位随机。"""
-    return "H" + datetime.now().strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:4].upper()
-
-
-def create_handoff_ticket(ticket_id: str, **fields) -> dict:
-    """登记一张转人工工单，并补上创建时间。"""
-    ticket = {
-        "ticket_id": ticket_id,
-        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        **fields,
-    }
-    _HANDOFF_TICKETS[ticket_id] = ticket
-    return ticket
-
-
-def get_handoff_ticket(ticket_id: str) -> dict | None:
-    """按工单号取一张工单。"""
-    return _HANDOFF_TICKETS.get(ticket_id)
-
-
-def list_handoff_tickets() -> list[dict]:
-    """人工工作台用：最新的工单排最前。"""
-    return sorted(
-        _HANDOFF_TICKETS.values(),
-        key=lambda t: t.get("created_at", ""),
-        reverse=True,
-    )

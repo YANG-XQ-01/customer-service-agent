@@ -13,7 +13,7 @@ import logging
 import sys
 import time
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import AIMessage, HumanMessage
@@ -24,10 +24,8 @@ from app.graph import agent_graph
 from app.memory import (
     add_message,
     get_attempts,
-    get_handoff_ticket,
     get_messages,
     increment_attempts,
-    list_handoff_tickets,
     reset_attempts,
 )
 
@@ -107,14 +105,37 @@ async def health():
 @app.get("/api/handoffs")
 async def handoffs():
     """人工工作台接口：返回全部工单（最新在前）。"""
-    return {"tickets": list_handoff_tickets()}
+    return {"tickets": store.list_handoff_tickets()}
+
+
+# ---------------- 限流与登录安全 ----------------
+
+def _client_ip(request: Request) -> str:
+    """取客户端 IP。
+
+    注意：如果服务部署在 Nginx 等反向代理后面，需要改成读
+    X-Forwarded-For 的第一段，并只信任可信代理写入的值。
+    """
+    return request.client.host if request.client else "unknown"
+
+
+def _enforce_rate_limit(identity: str, scope: str, limit: int, window: int = 60) -> None:
+    """固定窗口限流：超过限制抛 429，前端提示稍后再试。"""
+    count = store.incr_window(f"{scope}:{identity}", window)
+    if count > limit:
+        logger.warning("触发限流: scope=%s identity=%s count=%s", scope, identity, count)
+        raise HTTPException(
+            status_code=429,
+            detail=f"请求过于频繁，请稍后再试（{scope} 每分钟最多 {limit} 次）",
+        )
 
 
 # ---------------- 用户体系 ----------------
 
 @app.post("/api/register", response_model=AuthResponse)
-async def register(req: AuthRequest):
+async def register(req: AuthRequest, request: Request):
     """注册并直接登录。用户名重复返回 409。"""
+    _enforce_rate_limit(_client_ip(request), "auth", config.RATE_LIMIT_AUTH_PER_MIN)
     user = store.register_user(req.username, req.password)
     if user is None:
         raise HTTPException(status_code=409, detail="用户名已存在")
@@ -124,11 +145,24 @@ async def register(req: AuthRequest):
 
 
 @app.post("/api/login", response_model=AuthResponse)
-async def login(req: AuthRequest):
+async def login(req: AuthRequest, request: Request):
     """登录成功后签发令牌（有效期由 TOKEN_TTL 控制）。"""
+    _enforce_rate_limit(_client_ip(request), "auth", config.RATE_LIMIT_AUTH_PER_MIN)
+
+    # 连续失败锁定：达到上限后，即使密码正确也要等锁定窗口过期
+    failures = store.get_login_failures(req.username)
+    if failures >= config.LOGIN_MAX_FAILURES:
+        raise HTTPException(
+            status_code=429,
+            detail=f"登录失败次数过多，请 {config.LOGIN_LOCK_SECONDS // 60} 分钟后再试",
+        )
+
     user = store.verify_login(req.username, req.password)
     if user is None:
+        count = store.record_login_failure(req.username, config.LOGIN_LOCK_SECONDS)
+        logger.warning("登录失败: %s（累计 %s 次）", req.username, count)
         raise HTTPException(status_code=401, detail="用户名或密码错误")
+    store.clear_login_failures(req.username)
     token = store.create_token(user["user_id"])
     logger.info("用户登录: %s (%s)", user["username"], user["user_id"])
     return AuthResponse(token=token, **user)
@@ -175,7 +209,7 @@ def _read_token_usage(message: AIMessage) -> tuple:
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, request: Request):
     user_message = req.message.strip()
     if not user_message:
         raise HTTPException(status_code=400, detail="消息不能为空")
@@ -184,6 +218,13 @@ async def chat(req: ChatRequest):
     user_id = store.get_user_id_by_token(req.token) if req.token else None
     if req.token and not user_id:
         raise HTTPException(status_code=401, detail="登录已过期，请重新登录")
+
+    # 限流：登录用户按用户 ID，匿名按 IP
+    _enforce_rate_limit(
+        user_id or f"ip:{_client_ip(request)}",
+        "chat",
+        config.RATE_LIMIT_CHAT_PER_MIN,
+    )
 
     if user_id:
         session_id = user_id
@@ -254,7 +295,7 @@ async def chat(req: ChatRequest):
     handoff_info = None
     ticket_id = output.get("handoff_ticket_id")
     if ticket_id:
-        ticket = get_handoff_ticket(ticket_id)
+        ticket = store.get_handoff_ticket(ticket_id)
         if ticket:
             needs_human = True
             handoff_info = {
@@ -270,4 +311,3 @@ async def chat(req: ChatRequest):
         needs_human=needs_human,
         handoff=handoff_info,
     )
-

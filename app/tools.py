@@ -12,8 +12,8 @@ from langchain_core.tools import tool
 
 from app import config
 from app.db import SessionLocal
-from app.memory import new_ticket_id
 from app.models import AfterSale, LogisticsEvent, Order, OrderItem
+from app.store import new_ticket_id
 
 logger = logging.getLogger("customer-service")
 

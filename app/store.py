@@ -8,6 +8,7 @@
 import hashlib
 import json
 import secrets
+import time
 import uuid
 
 import redis
@@ -143,3 +144,99 @@ def increment_attempts(user_id: str) -> int:
 def reset_attempts(user_id: str) -> None:
     _client.delete(_attempts_key(user_id))
 
+
+# ---------------- 限流与登录失败锁定 ----------------
+
+def incr_window(key: str, window_seconds: int) -> int:
+    """固定窗口计数：窗口内第一次访问时设置过期时间，返回当前次数。
+
+    用于接口限流（如“每分钟最多 N 次”）和登录失败计数。
+    """
+    full_key = f"{_PREFIX}:rl:{key}"
+    value = _client.incr(full_key)
+    if value == 1 or _client.ttl(full_key) < 0:
+        _client.expire(full_key, window_seconds)
+    return int(value)
+
+
+def get_window_count(key: str) -> int:
+    return int(_client.get(f"{_PREFIX}:rl:{key}") or 0)
+
+
+def clear_window(key: str) -> None:
+    _client.delete(f"{_PREFIX}:rl:{key}")
+
+
+def _login_fail_key(username: str) -> str:
+    return f"login_fail:{username.strip().lower()}"
+
+
+def get_login_failures(username: str) -> int:
+    return get_window_count(_login_fail_key(username))
+
+
+def record_login_failure(username: str, lock_seconds: int) -> int:
+    """记录一次登录失败；返回累计失败次数。"""
+    return incr_window(_login_fail_key(username), lock_seconds)
+
+
+def clear_login_failures(username: str) -> None:
+    clear_window(_login_fail_key(username))
+
+
+# ---------------- 转人工工单（Redis 持久化） ----------------
+
+def new_ticket_id() -> str:
+    """生成唯一工单号：H + 时间戳 + 4 位随机。"""
+    return "H" + time.strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:4].upper()
+
+
+def _ticket_key(ticket_id: str) -> str:
+    return f"{_PREFIX}:ticket:{ticket_id}"
+
+
+_TICKET_INDEX = f"{_PREFIX}:tickets:index"
+
+
+def create_handoff_ticket(ticket_id: str, **fields) -> dict:
+    """写入工单并登记到索引（按时间倒序查询用）。"""
+    ticket = {
+        "ticket_id": ticket_id,
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        **fields,
+    }
+    _client.set(
+        _ticket_key(ticket_id),
+        json.dumps(ticket, ensure_ascii=False),
+        ex=config.TICKET_TTL,
+    )
+    _client.zadd(_TICKET_INDEX, {ticket_id: time.time()})
+    # 只用索引里保留最近 500 张，避免无限增长
+    _client.zremrangebyrank(_TICKET_INDEX, 0, -501)
+    return ticket
+
+
+def get_handoff_ticket(ticket_id: str) -> dict | None:
+    raw = _client.get(_ticket_key(ticket_id))
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+
+def list_handoff_tickets(limit: int = 100) -> list[dict]:
+    """人工工作台用：按时间倒序返回最近工单，顺带清理过期索引。"""
+    ids = _client.zrevrange(_TICKET_INDEX, 0, limit - 1)
+    tickets = []
+    stale = []
+    for ticket_id in ids:
+        ticket = get_handoff_ticket(ticket_id)
+        if ticket is None:
+            stale.append(ticket_id)
+            continue
+        tickets.append(ticket)
+    if stale:
+        _client.zrem(_TICKET_INDEX, *stale)
+    return tickets

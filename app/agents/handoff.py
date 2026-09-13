@@ -4,8 +4,8 @@ import time
 
 from langchain_core.messages import AIMessage, AnyMessage
 
-from app.memory import create_handoff_ticket, new_ticket_id
 from app.state import AgentState
+from app.store import create_handoff_ticket, new_ticket_id
 
 logger = logging.getLogger("customer-service")
 
@@ -66,4 +66,3 @@ async def handoff_node(state: AgentState) -> dict:
         "handoff_ticket_id": ticket_id,
         "trace": [f"handoff -> {ticket_id}"],
     }
-

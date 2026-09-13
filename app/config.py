@@ -40,6 +40,17 @@ REDIS_DB = int(os.getenv("REDIS_DB", "0"))
 # 聊天记录与登录令牌的过期时间（秒），默认 7 天
 CHAT_HISTORY_TTL = int(os.getenv("CHAT_HISTORY_TTL", str(7 * 24 * 3600)))
 TOKEN_TTL = int(os.getenv("TOKEN_TTL", str(7 * 24 * 3600)))
+# 工单保留时间（秒），默认 30 天
+TICKET_TTL = int(os.getenv("TICKET_TTL", str(30 * 24 * 3600)))
+
+# ---- 限流与登录安全 ----
+# 每个用户/IP 每分钟允许的聊天请求数
+RATE_LIMIT_CHAT_PER_MIN = int(os.getenv("RATE_LIMIT_CHAT_PER_MIN", "20"))
+# 每个 IP 每分钟允许的注册/登录请求数
+RATE_LIMIT_AUTH_PER_MIN = int(os.getenv("RATE_LIMIT_AUTH_PER_MIN", "10"))
+# 连续登录失败达到该次数后临时锁定
+LOGIN_MAX_FAILURES = int(os.getenv("LOGIN_MAX_FAILURES", "5"))
+LOGIN_LOCK_SECONDS = int(os.getenv("LOGIN_LOCK_SECONDS", "300"))
 
 # ---- MySQL（订单 / 售后数据）----
 MYSQL_HOST = os.getenv("MYSQL_HOST", "127.0.0.1")
