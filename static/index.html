@@ -78,11 +78,13 @@
     }
     .auth-tabs button.active { background: #2b6de8; color: #fff; }
     .auth-panel input {
-      width: 260px; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px;
+      flex: 0 0 auto;               /* 覆盖通用 input 的 flex:1，避免被拉伸填满 */
+      width: 240px; height: 34px; padding: 0 12px; border: 1px solid #ccc;
+      border-radius: 6px; font-size: 14px;
     }
     .auth-panel #auth-submit {
-      width: 260px; padding: 10px 0; border: none; border-radius: 8px;
-      background: #2b6de8; color: #fff; font-size: 15px; cursor: pointer;
+      flex: 0 0 auto; width: 240px; height: 36px; padding: 0; border: none;
+      border-radius: 6px; background: #2b6de8; color: #fff; font-size: 15px; cursor: pointer;
     }
     .auth-msg { min-height: 18px; color: #c0392b; font-size: 13px; }
     footer {
