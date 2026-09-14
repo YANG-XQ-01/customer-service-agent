@@ -39,47 +39,72 @@ def ping() -> bool:
 
 
 def _user_key(username: str) -> str:
+    """生成用户信息对应的 Redis key"""
     return f"{_PREFIX}:user:{username.strip().lower()}"
 
 
 def _token_key(token: str) -> str:
+    """生成登录令牌对应的 Redis key"""
     return f"{_PREFIX}:token:{token}"
 
 
 def _chat_key(user_id: str) -> str:
+    """生成聊天记录对应的 Redis key"""
     return f"{_PREFIX}:chat:{user_id}"
 
 
 def _attempts_key(user_id: str) -> str:
+    """生成连续失败计数对应的 Redis key"""
     return f"{_PREFIX}:attempts:{user_id}"
 
 
 def _hash_password(password: str, salt: str) -> str:
+    """对密码进行加盐哈希处理,生产环境推荐使用 bcrypt / passlib，而不是裸 sha256，sha256 计算太快，暴力破解风险更高。"""
     return hashlib.sha256(f"{salt}:{password}".encode("utf-8")).hexdigest()
 
 
 def register_user(username: str, password: str) -> dict | None:
-    """注册用户；用户名已存在返回 None。密码只存加盐哈希。"""
+    """注册用户；用户名已存在返回 None。密码只存加盐哈希。
+
+    并发安全：用 SET key value NX 做“按 key 的原子占位”——
+    只有一个请求能把用户名写进去，其余请求拿到 False 直接返回 None。
+    不用 HSET NX：一是 redis-py 的 hset() 不支持该参数，
+    二是 HSET 的 NX 是按字段判断，可能出现“只补齐部分字段”的半成品记录。
+    """
     key = _user_key(username)
-    if _client.exists(key):
-        return None
     salt = secrets.token_hex(8)
     user_id = uuid.uuid4().hex[:12]
-    _client.hset(
-        key,
-        mapping={
-            "user_id": user_id,
-            "username": username.strip(),
-            "salt": salt,
-            "password_hash": _hash_password(password, salt),
-        },
+    record = {
+        "user_id": user_id,
+        "username": username.strip(),
+        "salt": salt,
+        "password_hash": _hash_password(password, salt),
+    }
+    created = _client.set(
+        key, json.dumps(record, ensure_ascii=False), nx=True
     )
+    if not created:
+        return None
     return {"user_id": user_id, "username": username.strip()}
+
+
+def _load_user(key: str) -> dict:
+    """读取用户记录；兼容早期用 Hash 存储的旧数据。"""
+    kind = _client.type(key)
+    if kind == "string":
+        raw = _client.get(key)
+        try:
+            return json.loads(raw) if raw else {}
+        except json.JSONDecodeError:
+            return {}
+    if kind == "hash":
+        return _client.hgetall(key)
+    return {}
 
 
 def verify_login(username: str, password: str) -> dict | None:
     """校验账号密码；成功返回用户信息，失败返回 None。"""
-    data = _client.hgetall(_user_key(username))
+    data = _load_user(_user_key(username))
     if not data:
         return None
     expected = data.get("password_hash", "")
