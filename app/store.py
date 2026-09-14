@@ -22,17 +22,18 @@ _client = redis.Redis(
     host=config.REDIS_HOST,
     port=config.REDIS_PORT,
     db=config.REDIS_DB,
-    decode_responses=True,
-    socket_timeout=3,
-    socket_connect_timeout=3,
-    health_check_interval=30,
+    decode_responses=True,      # 自动把Redis返回的bytes类型解码成字符串str
+    socket_timeout=3,           # 读写Redis命令的超时时间：发送/接收数据超过3s就抛异常
+    socket_connect_timeout=3,   # 连接Redis服务器的超时时间：建立连接超过3s就抛异常
+    health_check_interval=30,   # 每30秒检查一次Redis服务器是否健康
 )
 
 
 def ping() -> bool:
     """健康检查用：Redis 是否可用。"""
     try:
-        return bool(_client.ping())
+        # redis-py 的 ping() 本身返回 True/False；这里只负责把异常转成 False
+        return _client.ping()
     except Exception:
         return False
 
